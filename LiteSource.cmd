@@ -389,22 +389,23 @@ ECHO        Set AdditionalWhere=$arc -le %%_Backup%% -and
 ECHO    ^)
 ECHO ^)
 ECHO.
-ECHO SET pjt=%%PJCT_FLDR%%
+ECHO rem If the target is not defined, set it to the PJCT_FLDR.
+ECHO IF NOT DEFINED _Target SET _Target=%%PJCT_FLDR%%
 ECHO rem ASSUME if you can read this and PJCT_FLDR is not a thing, it's the parent directory.
 ECHO IF NOT DEFINED PJCT_FLDR FOR %%%%a IN ("%%REPO_FLDR:~0,-1%%"^) DO SET pjt=%%%%~dpa
 ECHO rem Escape the Regex Metacharacters that are legal in a windows file path.
-ECHO SET pjt=%%pjt:\=\\%%
-ECHO SET pjt=%%pjt:+=\+%%
-ECHO SET pjt=%%pjt:^^=^^^^%%
-ECHO SET pjt=%%pjt:$=\$%%
-ECHO SET pjt=%%pjt:.=\.%%
-ECHO SET pjt=%%pjt:"=%%
+ECHO SET _Target=%%_Target:\=\\%%
+ECHO SET _Target=%%_Target:+=\+%%
+ECHO SET _Target=%%_Target:^^=^^^^%%
+ECHO SET _Target=%%_Target:$=\$%%
+ECHO SET _Target=%%_Target:.=\.%%
+ECHO SET _Target=%%_Target:"=%%
 ECHO.
 ECHO SET _Confirm_=
 ECHO IF NOT DEFINED _Confirmed SET _Confirm_= foreach ($result in $results.GetEnumerator(^)^) {if ($result.Value -eq ''^^^) {Write-Host Delete $result.Name} else {$msg='Update {0} from {1}' -f $result.Name, [DateTime]::ParseExact($result.Value, 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture^^^); Write-Host $msg}}; $resp = Read-Host 'Enter Y to continue'; if ($resp.ToUpper(^^^) -ne 'Y'^^^) {exit 1;}
 ECHO.
 ECHO echo.
-ECHO powershell -command "& {$Files = @{}; gc '%%REPO_FLDR%%Restore.cmd' | foreach-object { if ($_ -match ':(\d+)') {$arc=$matches[1]} else {if (%%AdditionalWhere%%$_ -match ':: (\w+) "".*%%pjt%%(.+)""""') {if ($matches[1] -eq 'Deleted') {$Files[$matches[2]]='';} else {$Files[$matches[2]]=$arc;} } } }; $I=0; $results=@{}; foreach ($k in $Files.Keys) {$I++; Write-Progress -Activity ('Scanning {0} files' -f $Files.Count) -Status $k -PercentComplete($I/$Files.Count*100); if (&{if ($Files.Item($k) -eq '') {Test-Path ('%%_Target%%' + $k)} else {(-not (Test-Path ('%%_Target%%\' + $k)) -or (Get-filehash $('%%REPO_FLDR%%\' + $Files.Item($k) + $k)).hash -ne (get-filehash $('%%_Target%%\' + $k)).hash)} }) {$results.Add($k, $Files.Item($k));}} if ($results.length -eq 0) {Write-Host No changes made.; exit 1;} %%_Confirm_%% foreach ($result in $results.GetEnumerator()) {$dst=""%%_Target%%{0}"""" -f $result.Name; if ($result.Value -ne '') {$src=""%%REPO_FLDR%%{0}{1}"""" -F $result.Value, $result.Name; New-Item -ItemType File -Path ""$dst"""" -force | out-null; Copy-Item ""$src"""" -Destination ""$dst"""" -force} else {if (Test-Path ""$dst"""") {Remove-Item ""$dst""""}}}; Write-Host Folder updated.;}"
+ECHO powershell -command "& {$Files = @{}; gc '%%REPO_FLDR%%Restore.cmd' | foreach-object { if ($_ -match ':(\d+)') {$arc=$matches[1]} else {if (%%AdditionalWhere%%$_ -match ':: (\w+) ""(.+)""""') {if ($matches[1] -eq 'Deleted') {$Files[$matches[2]]='';} else {$Files[$matches[2]]=$arc;} } } }; $I=0; $results=@{}; foreach ($k in $Files.Keys) {$I++; Write-Progress -Activity ('Scanning {0} files' -f $Files.Count) -Status $k -PercentComplete($I/$Files.Count*100); if (&{if ($Files.Item($k) -eq '') {Test-Path ('%%_Target%%' + $k)} else {(-not (Test-Path ('%%_Target%%\' + $k)) -or (Get-filehash $('%%REPO_FLDR%%\' + $Files.Item($k) + $k)).hash -ne (get-filehash $('%%_Target%%\' + $k)).hash)} }) {$results.Add($k, $Files.Item($k));}} if ($results.length -eq 0) {Write-Host No changes made.; exit 1;} %%_Confirm_%% foreach ($result in $results.GetEnumerator()) {$dst='%%_Target%%{0}' -f $result.Name; if ($result.Value -ne '') {$src='%%REPO_FLDR%%{0}{1}' -F $result.Value, $result.Name; New-Item -ItemType File -Path ""$dst"""" -force | out-null; Copy-Item ""$src"""" -Destination ""$dst"""" -force} else {if (Test-Path ""$dst"""") {Remove-Item ""$dst""""}}}; Write-Host Folder updated.;}"
 ECHO.
 ECHO if %%errorlevel%% == 1 exit /B 1
 ECHO exit /B 0
@@ -1059,7 +1060,7 @@ if "%2" == "Deleted" (
 	ECHO robocopy "%src%" "%%_Archive_%%%dst%" "!fln:^)=^^^)!"^>Nul
 )
 ECHO ECHO %2 %3
-ECHO ECHO :: %2 %3 ^>^>"%REPO_FLDR%\Restore.cmd"
+ECHO ECHO :: %2 "%dst%\%fln%" ^>^>"%REPO_FLDR%\Restore.cmd"
 ECHO :After%chr%
 )>>"%REPO_FLDR%\Commit.cmd"
 
