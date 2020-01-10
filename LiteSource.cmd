@@ -2,6 +2,7 @@
 
 SETLOCAL ENABLEDELAYEDEXPANSION
 
+SET _Diff_App_=
 SET _ForceCommit_=Y
 SET _Folder_=
 SET _SubFolderSwitch_=
@@ -1277,8 +1278,7 @@ if defined _SelectedFile_ (
 	REM Before comparing, alphabetize (chronologize) the two files. ASSUMES REPO_FLDR predates current folder (because it starts with '+').
 	
 	REM Unset _title_, and compare the two titles in alphabetical (chronological) order.  ASSUMES REPO_FLDR starts with +, which precedes any absolute path.
-	rem set _title_=&FOR /F "tokens=1-2 delims=*" %%a In ('set * 2^>Nul') DO if not defined _title_ (SET _title_=%%b) ELSE CALL :FileCompare "!_title_!" "%%b" "%_SkipDiffIni_%"
-	set _title_=&FOR /F "tokens=1-2 delims=*" %%a In ('set * 2^>Nul') DO if not defined _title_ (SET _title_=%%b) ELSE CALL :FileCompare "!_title_!" "%%b"
+	set _title_=&FOR /F "tokens=1-2 delims=*" %%a In ('set * 2^>Nul') DO if not defined _title_ (SET _title_=%%b) ELSE CALL :FileCompare "!_title_!" "%%b" "%_SkipDiffIni_%"
 
 	IF !ERRORLEVEL! EQU 1 SET _FileChanged_=Y
 
@@ -1395,18 +1395,22 @@ for /f "delims=" %%f in ('type "%REPO_FLDR%\Comp.tmp" ^| FINDSTR /rc:"^[A-Z]"') 
 :: If there were no differences, exit 0.
 if !errorlevel! equ 0 endlocal & exit /b 0
 
+:: If _Diff_App_ is not a thing, set CmdLine to the last (only?) line in Diff.ini.
+if not defined _Diff_App_ for /f "delims=" %%f in ('type "!REPO_FLDR!\Diff.ini"') do SET _Diff_App_=%%f
+
 :: If Diff.ini is a thing and SkipDiffIni is not defined...
-if exist %REPO_FLDR%\Diff.ini if not defined SkipDiffIni (
+if defined _Diff_App_ if not defined SkipDiffIni (
 
 	:: Copy the last file to the repo folder.
 	COPY "%~2" "%REPO_FLDR%\Current.bkp" /Y > Nul
 	
 	:: Set CmdLine to the last (only?) line in Diff.ini.
-	for /f "delims=" %%f in ('type "!REPO_FLDR!\Diff.ini"') do SET CmdLine=%%f
+	SET CmdLine=!_Diff_App_!
 	:: Replace %1 in the CmdLine with the first file name.
 	SET CmdLine=!CmdLine:%%1=%1!
 	:: Replace %2 in the CmdLine with the second file name.
 	SET CmdLine=!CmdLine:%%2=%2!
+
 	:: Use the differencing application, and wait for it to close.
 	start /wait "diff" !CmdLine!
 	
