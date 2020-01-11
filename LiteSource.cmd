@@ -1212,7 +1212,7 @@ SET _DefaultArchive_=%2
 
 set _FileChanged_=
 
-SET _SkipDiffIni_=Y
+SET _DashboardMode_=Y
 
 :: The filename is everything after the Project Folder...
 SET _FileName_=!_FileName_:%PJCT_FLDR%=!
@@ -1286,12 +1286,12 @@ if defined _SelectedFile_ (
 	REM Before comparing, alphabetize (chronologize) the two files. ASSUMES REPO_FLDR predates current folder (because it starts with '+').
 	
 	REM Unset _title_, and compare the two titles in alphabetical (chronological) order.  ASSUMES REPO_FLDR starts with +, which precedes any absolute path.
-	set _title_=&FOR /F "tokens=1-2 delims=*" %%a In ('set * 2^>Nul') DO if not defined _title_ (SET _title_=%%b) ELSE CALL :FileCompare "!_title_!" "%%b" "%_SkipDiffIni_%"
+	set _title_=&FOR /F "tokens=1-2 delims=*" %%a In ('set * 2^>Nul') DO if not defined _title_ (SET _title_=%%b) ELSE CALL :FileCompare "!_title_!" "%%b" "%_DashboardMode_%"
 
 	IF !ERRORLEVEL! EQU 1 SET _FileChanged_=Y
 
-	:: Unset _SkipDiffIni_
-	SET _SkipDiffIni_=
+	:: Unset _DashboardMode_
+	SET _DashboardMode_=
 
 	:: Unset _HighlightedFile_
 	SET _HighlightedFile_=
@@ -1303,7 +1303,7 @@ echo.
 
 if exist "%REPO_FLDR%\Catalog.tmp" del "%REPO_FLDR%\Catalog.tmp"
 
-powershell -command "& {FUNCTION ASCII {Param([int] $i) if ($i -le 0) {return '';} $r=$i %% 26; if ($r -eq 0) {$r=26;} return $(ASCII (($i-$r)/26)) + [char]($r+64);}; $ctr=1; gci '.\%REPO_FLDR%\' -recurse -include '%_FileName_%' | resolve-path -Relative | ForEach-Object {$_ -match '\.\\[^\\]+\\(\d+)\\.+' | out-null; if ('%_DefaultArchive_%' -eq $matches[1]) {$str='--';} else {$str=ASCII($ctr++);} Write-output $('{0} {1}\{2}\{3}' -f $str, '%REPO_FLDR%', $matches[1], '%_FileName_%') | out-file .\%REPO_FLDR%\CATALOG.TMP -Append; if ('%_DefaultArchive_%' -eq $matches[1]) {$str=$str + '>';} else {$str=$str + ')';} $str=$str.PadRight(4); $ts = NEW-TIMESPAN ([DateTime]::ParseExact($matches[1], 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture)) (GET-DATE); if ($ts.days -ne 0) { $str=$str + $ts.days + ' day'; } elseif ($ts.hours -ne 0) { $str=$str + $ts.hours + ' hour'; } else { $str=$str + $ts.minutes + ' minute'; } if (-not ($str -match '[A-Z-]+.\s+1 ')) { $str=$str + 's';} $str+=' ago.'; $str=$str.PadRight(20); gc .\%REPO_FLDR%\Restore.cmd | Where-Object { $_ -match ':{0} (.+)' -f $matches[1] | out-null }; $str + $matches[1];}; $str=ASCII($ctr); '{0}  Current Version' -f $str; Write-output $('{0} {1}' -f $str, '%~1') | out-file .\%REPO_FLDR%\CATALOG.TMP -Append;}"
+powershell -command "& {FUNCTION ASCII {Param([int] $i) if ($i -le 0) {return '';} $r=$i %% 26; if ($r -eq 0) {$r=26;} return $(ASCII (($i-$r)/26)) + [char]($r+64);}; $ctr=1; gci '.\%REPO_FLDR%\' -recurse | resolve-path -Relative | Select-String -Pattern '%_FileName_:\=\\%$' | ForEach-Object {$_ -match '\.\\[^\\]+\\(\d+)\\.+' | out-null; if ('%_DefaultArchive_%' -eq $matches[1]) {$str='--';} else {$str=ASCII($ctr++);} Write-output $('{0} {1}\{2}\{3}' -f $str, '%REPO_FLDR%', $matches[1], '%_FileName_%') | out-file .\%REPO_FLDR%\CATALOG.TMP -Append; if ('%_DefaultArchive_%' -eq $matches[1]) {$str=$str + '>';} else {$str=$str + ')';} $str=$str.PadRight(4); $ts = NEW-TIMESPAN ([DateTime]::ParseExact($matches[1], 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture)) (GET-DATE); if ($ts.days -ne 0) { $str=$str + $ts.days + ' day'; } elseif ($ts.hours -ne 0) { $str=$str + $ts.hours + ' hour'; } else { $str=$str + $ts.minutes + ' minute'; } if (-not ($str -match '[A-Z-]+.\s+1 ')) { $str=$str + 's';} $str+=' ago.'; $str=$str.PadRight(20); gc .\%REPO_FLDR%\Restore.cmd | Where-Object { $_ -match ':{0} (.+)' -f $matches[1] | out-null }; $str + $matches[1];}; $str=ASCII($ctr); '{0})  Current Version' -f $str; Write-output $('{0} {1}' -f $str, '%PJCT_FLDR%\%_FileName_%') | out-file .\%REPO_FLDR%\CATALOG.TMP -Append;}"
 
 echo.
 
@@ -1354,12 +1354,11 @@ if %cnt% GTR 1 (
 	echo Enter A to compare to %Desc%
 )
 set /p rsp=or nothing to return: 
-
+cls
 :: If the user entered nothing, clean the repository folder and return.
 if not defined rsp (
 	del "%REPO_FLDR%\CATALOG.tmp" >Nul
 	del "%REPO_FLDR%\*.bkp" /F /Q >Nul
-	cls
 	color 1F
 	if defined _FileChanged_ (endlocal & exit /b 1)
 	endlocal
@@ -1381,16 +1380,16 @@ if not defined _SelectedFile_ (
 
 GOTO :StartExploreFile
 
-:FileCompare <File1> <File2> <File3/SkipDiffIni>
+:FileCompare <File1> <File2> <File3/DashboardMode>
 setlocal enabledelayedexpansion
 
 Set Verbose=
 
-:: Unset SkipDiffIni.
-Set SkipDiffIni=
+:: Unset DashboardMode.
+Set DashboardMode=
 
-:: If the third arg is specified and it's not a file, set SkipDiffIni.
-if '%~3' NEQ '' if not exist "%~3" SET SkipDiffIni=Y
+:: If the third arg is specified and it's not a file, set DashboardMode.
+if '%~3' NEQ '' if not exist "%~3" SET DashboardMode=Y
 
 REM cls
 
@@ -1406,8 +1405,8 @@ if !errorlevel! equ 0 endlocal & exit /b 0
 :: If _Diff_App_ is not a thing, set CmdLine to the last (only?) line in Diff.ini.
 if not defined _Diff_App_ for /f "delims=" %%f in ('type "!REPO_FLDR!\Diff.ini"') do SET _Diff_App_=%%f
 
-:: If Diff.ini is a thing and SkipDiffIni is not defined...
-if defined _Diff_App_ if not defined SkipDiffIni (
+:: If Diff.ini is a thing and DashboardMode is not defined...
+if defined _Diff_App_ if not defined DashboardMode (
 
 	:: Copy the last file to the repo folder.
 	COPY "%~2" "%REPO_FLDR%\Current.bkp" /Y > Nul
