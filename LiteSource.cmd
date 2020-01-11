@@ -324,10 +324,12 @@ ECHO ECHO.
 ECHO ECHO RESTORE destination [source] [/U] [/Y]
 ECHO ECHO.
 ECHO ECHO  destination  The destination folder to restore or update.
-ECHO ECHO  source       The name of the Archive folder to restore to or update from.
-ECHO ECHO               If ommitted, restores all or updates all except initial commit.
+ECHO ECHO  source       The name of the Archive folder to restore to or update from as specified below.
+ECHO ECHO               If omitted, updates all except initial commit or restores all.
 ECHO ECHO  /U           Update mode.
 ECHO ECHO  /Y           Does not ask before overwriting or creating a new folder.
+ECHO ECHO.
+ECHO for /f "tokens=1* delims=: " %%%%f in ('findstr /r ":[0-9][0-9]*" "%%~f0"'^) DO ECHO %%%%f: %%%%g
 ECHO ECHO.
 ECHO ECHO Use this application to:
 ECHO ECHO	A^) Restore a project completely.                 e.g. Restore N:\MyProject
@@ -378,7 +380,7 @@ ECHO.
 ECHO rem If the user is updating and a Backup is not specified...
 ECHO IF '%%_verb_%%' == 'update' IF NOT DEFINED _Backup (
 ECHO     rem ...find the second backup from Restore.cmd and get the archive folder name...
-ECHO     for /f "tokens=1-2 delims=: " %%%%f in ('findstr /r ":[0-9][0-9]*" "%%REPO_FLDR%%\\Restore.cmd" ^^^| find ":" /n ^^^| findstr /b "[2]:"'^) DO SET _Backup=%%%%g
+ECHO     for /f "tokens=1-2 delims=: " %%%%f in ('findstr /r ":[0-9][0-9]*" "%%~f0" ^^^| find ":" /n ^^^| findstr /b "[2]:"'^) DO SET _Backup=%%%%g
 ECHO     rem ...and if _Backup is still not a thing (no second backup in Restore.cmd^), warn the user and quit.
 ECHO     IF NOT DEFINED _Backup ECHO Please specify an existing archive to update.^&PAUSE^&EXIT /B 1
 ECHO ^)
@@ -395,7 +397,7 @@ ECHO.
 ECHO rem If the target is not defined, set it to the PJCT_FLDR.
 ECHO IF NOT DEFINED _Target SET _Target=%%PJCT_FLDR%%
 ECHO rem ASSUME if you can read this and PJCT_FLDR is not a thing, it's the parent directory.
-ECHO IF NOT DEFINED PJCT_FLDR FOR %%%%a IN ("%%REPO_FLDR:~0,-1%%"^) DO SET pjt=%%%%~dpa
+ECHO IF NOT DEFINED _Target FOR %%%%a IN ("%%REPO_FLDR:~0,-1%%"^) DO SET _Target=%%%%~dpa
 ECHO rem Escape the Regex Metacharacters that are legal in a windows file path.
 ECHO SET _Target=%%_Target:\=\\%%
 ECHO SET _Target=%%_Target:+=\+%%
@@ -646,12 +648,13 @@ ECHO IF '%%1' NEQ '' IF '%%1' NEQ '/?' GOTO :StartCommit
 ECHO.
 ECHO ECHO Commits a change or changes from %PJCT_FLDR%
 ECHO.
-ECHO ECHO COMMIT message destination [a [+b] [+c]...]
+ECHO ECHO COMMIT message destination [A [+B] [+C]...]
 ECHO.
 ECHO ECHO message            The message pertaining to the new Archive (5 chars+^)
 ECHO ECHO destination        The name of the new Archive.
 ECHO ECHO a [+b] [+c]...     The files to commit.  If omitted, commits all.
-ECHO pause
+ECHO ECHO.
+FOR /F "tokens=1-2* delims=:^) " %%%%f IN ('findstr /R "^:[A-Z][A-Z]*^)[^-]" "%%~f0"'^) DO echo %%%%f: %%%%h
 ECHO GOTO :EOF
 ECHO.
 ECHO :StartCommit
