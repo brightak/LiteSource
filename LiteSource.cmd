@@ -2,7 +2,9 @@
 
 SETLOCAL ENABLEDELAYEDEXPANSION
 
+rem SET File Differencer here (e.g. "C:\Program Files (x86)\Folder\Application.exe" %%1 %%2).
 SET _Diff_App_=
+
 SET _ForceCommit_=Y
 SET _Folder_=
 SET _SubFolderSwitch_=
@@ -734,6 +736,7 @@ SET _ForceCommit_=
 SET _inc_=
 SET Msg=
 CLS
+color 1F
 for %%a in (.) do set title=%%~nxa\%~n0
 
 CALL :EchoCenterPad " %title% " "-"
@@ -1084,7 +1087,8 @@ EXIT /B
 SETLOCAL EnableDelayedExpansion
 SET _ArchiveChanged_=
 :StartExploreArchive
-
+cls
+color 2E
 :: Get the %1th archive from Restore.cmd.  WARNING: If %1th archive is not a thing, _Archive_ is not set.
 for /f "tokens=1* delims=:" %%f in ('findstr /r ":[0-9][0-9]*" "%REPO_FLDR%\Restore.cmd" ^| find ":" /n ^| findstr /b "[%1\]:"') do SET _Archive_=%%g
 
