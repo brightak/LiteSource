@@ -1170,12 +1170,16 @@ if "%chr%" EQU "A" (
 	set /p Msg=or nothing to return: 
 )
 
+set Selection=%Msg%
+rem In case the user typed @, ignore it.
+if "!Selection:~0,1!" EQU "@" set Selection=!Msg:~1!
+	
 rem Unless the user just clicked Enter...
-if defined Msg (
+if defined Selection (
 	rem If the target is still not defined, complain and retry.
-	if not defined ?%Msg%? echo %Msg% not found.&pause&CLS&GOTO :StartExploreArchive
+	if not defined ?%Selection%? echo %Selection% not found.&pause&CLS&GOTO :StartExploreArchive
 	rem Set the target.
-	set _Target_=!?%Msg%?!
+	set _Target_=!?%Selection%?!
 	rem Explore the file.
 	CALL :ExploreFile !_Target_! !_Archive_!
 	if !ERRORLEVEL! equ 1 SET _ArchiveChanged_=Y
