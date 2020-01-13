@@ -481,12 +481,7 @@ SET PJCT_FLDR=
 SET /A "_Count_=0"
 
 :: Look for the files in this folder and if any are the same as this batch file, count the file and repo folder if it exists.
-for /f delims^=^"^ tokens^=1-3 %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%~dpnx0""">Nul && echo @file @fname"') do (
-	rem If the file is a thing, increment count.
-	SET /A "_Count_+=1"
-	rem if the repo folder is a thing, increment count.
-	if exist +%%c SET /A "_Count_+=1"
-)
+for /f delims^=^"^ tokens^=1-3 %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%~dpnx0""">Nul && echo @file @fname"') do SET /A "_Count_+=1"&if exist +%%c SET /A "_Count_+=1"
 
 :: If this folder has more files than what's discovered, this is the path.
 for /f %%a in ('dir /b ^|find "" /v /c') do if %%a neq %_Count_% GOTO :GotPath
@@ -1645,7 +1640,7 @@ EXIT /b
 
 setlocal EnableDelayedExpansion
 
-:: TODO When inp has parentheses or spaces.
+:: TODO When inp has parentheses.
 
 :: Remember the input
 set "inp=%~1"
@@ -1731,7 +1726,7 @@ EXIT /b 0
 
 :CleanFile string -- alphabetizes lines in a file and omits duplicates.
 powershell -command "& {gc '%~1' | sort -u | ? {$_ -ne ''} | Out-file '%REPO_FLDR%\Temp.del'}"
-Type "%REPO_FLDR%\Temp.del" > %~1
+Type "%REPO_FLDR%\Temp.del" > "%~1"
 del "%REPO_FLDR%\Temp.del"
 exit /b
 
