@@ -470,38 +470,6 @@ color 1f
 ::If Old.txt is a thing, it's not a new archive.
 If EXIST "%REPO_FLDR%\Old.txt" GOTO :GotOldText
 
-REM BRANCHES
-
-rem Unset all variables starting with ?.  ASSUMES ? is an illegal char in a file name.
-FOR /F "delims==" %%a In ('set ? 2^>Nul') DO SET "%%a="
-
-rem Find all files in this root folder and if any are identical to this file, remember the repo folder and its date.
-for /f "delims=" %%f in ('dir /b /s /a-d ^| find /v "%~dpnx0" ^| findstr /vrc:"%CD:\=\\%\\.*\\.*"') do (
-	fc "%~0" "%%f" > Nul && (
-		for /f "tokens=1-2 delims= " %%g in ('dir /T:C ^| findstr /e "+%%~nf"') do (
-			CALL :JDate d "%%g"
-			CALL :JTime t "%%h"
-			SET ?!d!!t!?=?+%%~nf
-		)
-	)
-)
-
-rem If nothing is set, it's the first rodeo.
-set ? && (
-
-	cls
-
-	rem Otherwise, create the repo folder if necessary.
-	if not exist "%REPO_FLDR%" md "%REPO_FLDR%"
-
-	FOR /F "tokens=1-3 delims=?" %%a In ('set ? 2^>Nul') DO (
-		if exist "%%c\*.ini" COPY "%%c\*.ini" "!REPO_FLDR!" /Y > Nul
-		COPY "%%c\*.txt" "!REPO_FLDR!" /Y > Nul
-		CALL :StartCommit
-		goto :eof
-	)
-
-)
 :FirstRodeo
 
 CLS
@@ -509,8 +477,19 @@ CLS
 :: If this is your first rodeo, unset the PJCT_FLDR.
 SET PJCT_FLDR=
 
-:: If this folder has any files except this batch file, this is the path.
-dir /b /s | find /v "%~dpnx0" | find /v "%~dp0%REPO_FLDR%" > Nul && GOTO :GotPath
+:: Zero the count.
+SET /A "_Count_=0"
+
+:: Look for the files in this folder and if any are the same as this batch file, count the file and repo folder if it exists.
+for /f delims^=^"^ tokens^=1-3 %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%~dpnx0""">Nul && echo @file @fname"') do (
+	rem If the file is a thing, increment count.
+	SET /A "_Count_+=1"
+	rem if the repo folder is a thing, increment count.
+	if exist +%%c SET /A "_Count_+=1"
+)
+
+:: If this folder has more files than what's discovered, this is the path.
+for /f %%a in ('dir /b ^|find "" /v /c') do if %%a neq %_Count_% GOTO :GotPath
 
 :: Otherwise, ask for a folder to track.
 set /p PJCT_FLDR=Please specify a folder to track (or enter nothing to quit): 
