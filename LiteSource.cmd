@@ -310,6 +310,8 @@ rem CALL :strLen "%CD%\%REPO_FLDR%\" len
 :: TODO Make Restore.cmd paths relative.
 (
 ECHO @ECHO OFF
+ECHO SET NoArgs=
+ECHO IF '%%1' EQU '' SET NoArgs=Y
 ECHO.
 ECHO SETLOCAL ENABLEDELAYEDEXPANSION
 ECHO.
@@ -324,11 +326,12 @@ ECHO ECHO.
 ECHO ECHO RESTORE destination [source] [/U] [/Y]
 ECHO ECHO.
 ECHO ECHO  destination  The destination folder to restore or update.
-ECHO ECHO  source       The name of the Archive folder to restore to or update from as specified below.
+ECHO ECHO  source       The name of the Archive folder to restore to or update from.
 ECHO ECHO               If omitted, updates all except initial commit or restores all.
 ECHO ECHO  /U           Update mode.
 ECHO ECHO  /Y           Does not ask before overwriting or creating a new folder.
 ECHO ECHO.
+ECHO findstr /r ":[0-9][0-9]*" "%%~f0"^>Nul ^&^& ECHO Known Archives:
 ECHO for /f "tokens=1* delims=: " %%%%f in ('findstr /r ":[0-9][0-9]*" "%%~f0"'^) DO ECHO %%%%f: %%%%g
 ECHO ECHO.
 ECHO ECHO Use this application to:
@@ -336,6 +339,8 @@ ECHO ECHO	A^) Restore a project completely.                 e.g. Restore N:\MyPr
 ECHO ECHO	B^) Restore a project to a certain point.         e.g. Restore N:\MyProject EndingArchiveName
 ECHO ECHO	C^) Apply only recent changes to an archive.      e.g. Restore C:\Archive1 StartingArchiveName /U
 ECHO ECHO	D^) Fill a folder with only updated/added files.  e.g. Restore C:\Archive1 /U
+ECHO ECHO.
+ECHO IF DEFINED NoArgs PAUSE
 ECHO GOTO :EOF
 ECHO :Start
 ECHO SET _Confirmed=
@@ -358,7 +363,7 @@ ECHO IF '%%1' NEQ '' IF NOT DEFINED _Target SET _Target=%%1^&SHIFT^&GOTO :Top
 ECHO rem If the target folder is a thing but the archive folder is and the argument is, set the backup folder.
 ECHO IF '%%1' NEQ '' IF DEFINED _Target SET _Backup=%%1^&SHIFT^&GOTO :Top
 ECHO rem If a Target folder is not specified, quit gracefully.
-ECHO IF NOT DEFINED _Target ECHO Please specify a folder to %%_verb_%%.^&pause^&GOTO :EOF
+ECHO GOTO :Help
 ECHO rem If the Target folder doesn't exist...
 ECHO rem Take the single quotes from the Target folder name.
 ECHO SET _Target=%%_Target:'=%%
@@ -615,9 +620,10 @@ FC "%REPO_FLDR%\New.txt" "%REPO_FLDR%\Old.txt">Nul && if [%Msg%] EQU [] GOTO :Sh
 rem Otherwise, start the Commit.cmd file.
 
 :StartCommit -- Make the Commit.cmd file by comparing New.txt to Old.txt.
-:: TODO Make Commit.cmd paths relative.
 (
 ECHO @ECHO OFF
+ECHO SET NoArgs=
+ECHO IF '%%1' EQU '' SET NoArgs=Y
 ECHO IF '%%1' NEQ '' IF '%%1' NEQ '/?' GOTO :StartCommit
 ECHO.
 ECHO ECHO Commits a change or changes from %PJCT_FLDR%
@@ -628,9 +634,12 @@ ECHO ECHO message            The message pertaining to the new Archive (5 chars+
 ECHO ECHO destination        The name of the new Archive.
 ECHO ECHO a [+b] [+c]...     The files to commit.  If omitted, commits all.
 ECHO ECHO.
-FOR /F "tokens=1-2* delims=:^) " %%%%f IN ('findstr /R "^:[A-Z][A-Z]*^)[^-]" "%%~f0"'^) DO echo %%%%f: %%%%h
+ECHO findstr /r ":[A-Z][A-Z]*)[^-]" "%%~f0"^>Nul ^&^& ECHO Targeted Files:
+ECHO FOR /F "tokens=1-2* delims=:^) " %%%%f IN ('findstr /R "^:[A-Z][A-Z]*)[^-]" "%%~f0"'^) DO echo %%%%f: %%%%h
+ECHO ECHO.
+ECHO IF DEFINED NoArgs PAUSE
 ECHO GOTO :EOF
-ECHO.
+ECHO ECHO.
 ECHO :StartCommit
 ECHO SET _Message_=%%1
 ECHO SET _Message_=%%_Message_:"=%%
