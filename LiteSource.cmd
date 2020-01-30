@@ -3,7 +3,7 @@
 SETLOCAL ENABLEDELAYEDEXPANSION
 
 rem SET File Differencer here (e.g. "C:\Program Files (x86)\Folder\Application.exe" %%1 %%2).
-SET _Diff_App_=
+SET _Diff_App_="C:\Program Files (x86)\Meld\Meld.exe" %%1 %%2
 
 SET _ForceCommit_=Y
 SET _Folder_=
@@ -482,14 +482,10 @@ CLS
 :: If this is your first rodeo, unset the PJCT_FLDR.
 SET PJCT_FLDR=
 
-:: Zero the count.
-SET /A "_Count_=0"
-
-:: Look for the files in this folder and if any are the same as this batch file, count the file and repo folder if it exists.
-for /f delims^=^"^ tokens^=1-3 %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%~dpnx0""">Nul && echo @file @fname"') do SET /A "_Count_+=1"&if exist +%%c SET /A "_Count_+=1"
-
-:: If this folder has more files than what's discovered, this is the path.
-for /f %%a in ('dir /b ^|find "" /v /c') do if %%a neq %_Count_% GOTO :GotPath
+SET Batch=%~nx0
+SET Batch=%Batch:)=^^)%
+:: Look for the files in this folder and if any are different from this batch file, this is the path.
+for /f %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%Batch%""">Nul || echo @file"') do GOTO :GotPath
 
 :: Otherwise, ask for a folder to track.
 set /p PJCT_FLDR=Please specify a folder to track (or enter nothing to quit): 
@@ -525,16 +521,13 @@ SET INCL_FLDR=
 if defined PJCT_FLDR (
 	SET INCL_FLDR="%PJCT_FLDR%"
 ) else (
-	SET PJCT_FLDR=%CD%
+	SET PJCT_FLDR=!CD!
 )
 
 :: FOR ROBOCOPY, ensure Project Folder does not end in \
 SET PJCT_FLDR="%PJCT_FLDR%"
 SET PJCT_FLDR=%PJCT_FLDR:\"="%
 SET PJCT_FLDR=%PJCT_FLDR:"=%
-
-SET PJCT_FLDR=!PJCT_FLDR:^)=^\^)!
-SET PJCT_FLDR=!PJCT_FLDR:^(=^\^(!
 
 :: Create the Repo folder if necessary.
 if not exist "%REPO_FLDR%" MD "%REPO_FLDR%\"
@@ -550,14 +543,14 @@ SET fileCount=0
 for /f %%a in ('type "%REPO_FLDR%\New.txt"^|find "" /v /c') do set /a fileCount=%%a
 
 if %filecount% GTR 1000 (
-	ECHO %PJCT_FLDR% has %fileCount% files.
+	ECHO !PJCT_FLDR! has %fileCount% files.
 ) ELSE (
 	SET byteCount=0
 	for /f delims^=^"^ tokens^=1 %%f IN ('Type "%REPO_FLDR%\New.txt"') do SET /A byteCount+=%%~zf
 	if %filecount% EQU 1 (
-		ECHO !PJCT_FLDR:^)=^\^)! has %fileCount% file in !byteCount! bytes.
+		ECHO !PJCT_FLDR! has %fileCount% file in !byteCount! bytes.
 	) else (
-		ECHO !PJCT_FLDR:^)=^\^)! has %fileCount% files in !byteCount! bytes.
+		ECHO !PJCT_FLDR! has %fileCount% files in !byteCount! bytes.
 	)
 )
 
@@ -592,8 +585,8 @@ set PJCT_FLDR=%PJCT_FLDR:"=%
 :: If the Project Folder is not connected, complain.
 if not exist "%PJCT_FLDR%" ECHO "%PJCT_FLDR%" not found.&pause&GOTO ShowSummary
 
-set PJCT_FLDR=!PJCT_FLDR:^)=^\^)!
-set PJCT_FLDR=!PJCT_FLDR:^(=^\^(!
+rem set PJCT_FLDR=!PJCT_FLDR:^)=^\^)!
+rem set PJCT_FLDR=!PJCT_FLDR:^(=^\^(!
 
 :: If it's a file, get the parent folder.
 CALL :IsFolder "!PJCT_FLDR!" || for /f "delims=" %%f in ("!PJCT_FLDR!") do SET PJCT_FLDR=%%~dpf
@@ -618,7 +611,6 @@ rem If no differences are found between New.txt and Old.txt, and Msg is not a th
 FC "%REPO_FLDR%\New.txt" "%REPO_FLDR%\Old.txt">Nul && if [%Msg%] EQU [] GOTO :ShowSummary
 
 rem Otherwise, start the Commit.cmd file.
-
 :StartCommit -- Make the Commit.cmd file by comparing New.txt to Old.txt.
 (
 ECHO @ECHO OFF
@@ -626,7 +618,7 @@ ECHO SET NoArgs=
 ECHO IF '%%1' EQU '' SET NoArgs=Y
 ECHO IF '%%1' NEQ '' IF '%%1' NEQ '/?' GOTO :StartCommit
 ECHO.
-ECHO ECHO Commits a change or changes from %PJCT_FLDR%
+ECHO ECHO Commits a change or changes from !PJCT_FLDR!
 ECHO.
 ECHO ECHO COMMIT message destination [A [+B] [+C]...]
 ECHO.
@@ -661,7 +653,7 @@ ECHO IF [%%3] EQU [] GOTO :A^)
 ECHO SET _FilesToCommit_=%%_FilesToCommit_%% %%2
 ECHO SHIFT
 ECHO GOTO :LoopArgs
-)>"%REPO_FLDR%\Commit.cmd"
+)>"!REPO_FLDR!\Commit.cmd"
 
 SET "ChangeCount=0"
 
@@ -832,6 +824,8 @@ if "%Msg:~0,1%" NEQ "@" GOTO :NoHistory
 rem Drop the leading @
 set Msg=!Msg:~1!
 
+echo !Msg!
+
 SET "var="&for /f "delims=0123456789" %%i in ("%Msg%") do set var=%%i
 
 rem If the input is numeric...
@@ -850,8 +844,8 @@ if not defined var (
 	FOR /F "tokens=1-2* delims= " %%f IN ('findstr /I /B ":%Msg%) " "%REPO_FLDR%\Commit.cmd"') DO Set _File_=%%h
 	:: If no filename is found, complain and quit.
 	if not defined _File_ echo %Msg% is not found. & pause & goto :ShowSummary
-	:: Otherwise, explore this file.
-	CALL :ExploreFile !_File_!
+	:: Otherwise, explore the file minus the Project Folder.
+	echo CALL :ExploreFile !_File_:%PJCT_FLDR:)=^)%=!
 )
 
 rem Refresh this menu, and Msg and Commit.cmd if necessary.
@@ -1050,7 +1044,7 @@ if "%2" == "Deleted" (
 	ECHO robocopy "%src%" "%%_Archive_%%%dst%" "!fln:^)=^^^)!"^>Nul
 )
 ECHO ECHO %2 %3
-ECHO ECHO :: %2 "%dst%\%fln%" ^>^>"%REPO_FLDR%\Restore.cmd"
+ECHO ECHO :: %2 "%dst%\%fln%"^>^>"%REPO_FLDR%\Restore.cmd"
 ECHO :After%chr%
 )>>"%REPO_FLDR%\Commit.cmd"
 
@@ -1139,11 +1133,11 @@ if defined _Line_ (
 	for /f "tokens=1* delims= " %%f in ("%_Line_%") do set ?!chr!?=%%g
 	if defined _MultipleFilesFound_ (
 		:: If the label is two letters, drop a space from _Line_
-		if !cnt! GTR 26 SET _Line_=!_Line_:~1!
+		rem if !cnt! GTR 26 SET _Line_=!_Line_:~1!
 		:: If three, drop a second.
-		if !cnt! GTR 676 SET _Line_=!_Line_:~1!
+		rem if !cnt! GTR 676 SET _Line_=!_Line_:~1!
 		:: If four, drop a third.
-		if !cnt! GTR 17576 SET _Line_=!_Line_:~1!
+		rem if !cnt! GTR 17576 SET _Line_=!_Line_:~1!
 		:: Echo the label and the line.
 		ECHO !chr!^) !_Line_!
 	)
@@ -1163,7 +1157,7 @@ if "%chr%" EQU "A" (
 set Selection=%Msg%
 rem In case the user typed @, ignore it.
 if "!Selection:~0,1!" EQU "@" set Selection=!Msg:~1!
-	
+
 rem Unless the user just clicked Enter...
 if defined Selection (
 	rem If the target is still not defined, complain and retry.
@@ -1171,7 +1165,7 @@ if defined Selection (
 	rem Set the target.
 	set _Target_=!?%Selection%?!
 	rem Explore the file.
-	CALL :ExploreFile !_Target_! !_Archive_!
+	CALL :ExploreFile !_Target_! "%REPO_FLDR%\!_Archive_!!_Target_:"=!"
 	if !ERRORLEVEL! equ 1 SET _ArchiveChanged_=Y
 	rem Refresh the menu.
 	if "%chr%" NEQ "A" CLS&GOTO :StartExploreArchive
@@ -1181,27 +1175,17 @@ if defined _ArchiveChanged_ (endlocal & exit /b 1)
 endlocal
 exit /b 0
 
-:ExploreFile <FileName> <Archive-opt>
+:ExploreFile <FileName> <Default>
 ::           <FileName> relative name of the file to explore.
-::           <Archive> optional operative archive.  If omitted, current version is assumed.
+::			 <Default>  default filename to use as the control when exploring.
 rem setlocal EnableDelayedExpansion
 
-cls
+:: Set DashboardMode.
+Set DashboardMode=Y
 
-color 7
-
-SET _HighlightedFile_=%~1
-
-SET _FileName_=%1
-
-SET _DefaultArchive_=%2
+SET _FileName_=%~1
 
 set _FileChanged_=
-
-SET _DashboardMode_=Y
-
-:: The filename is everything after the Project Folder...
-SET _FileName_=!_FileName_:%PJCT_FLDR%=!
 
 :: ...ensure one and only one pair of quotes...
 SET _FileName_="%_FileName_:"=%"
@@ -1211,122 +1195,291 @@ SET _FileName_=%_FileName_:"\="%
 
 :: ...and all quotes.
 SET _FileName_=!_FileName_:"=!
-:: Look for archived versions of this file.
-SET FilesFound=&FOR /F "DELIMS=" %%F IN ('DIR /B /S /A-D /ON "%REPO_FLDR%" ^| FindStr /IRC:"!_FileName_:\=\\!$"') DO SET FilesFound=Y
-:: If not found, complain and quit.
-if not defined FilesFound echo No archive files found. & pause & cls & color 1F & exit /b 0
 
-:: If a default archive is specified and it's a thing, change _HighlightedFile_ to that archive.
-if defined _DefaultArchive_ if exist "%REPO_FLDR%\%_DefaultArchive_%\%_FileName_%" SET _HighlightedFile_=%REPO_FLDR%\%_DefaultArchive_%\%_FileName_%
+:: Escape all parentheses
+SET _FileName_=!_FileName_:^)=^\^)!
 
-:: Find the last update of this file before _HighlightedFile_.
-SET _SelectedFile_=&FOR /F "DELIMS=" %%F IN ('DIR /B /S /A-D /ON "%REPO_FLDR%" ^| FindStr /IRC:"!_FileName_:\=\\!$"') DO IF "%%F" EQU "%CD%\!_HighlightedFile_!" (GOTO :StartExploreFile) ELSE SET _SelectedFile_=%%F
+rem SET _FileName_=!_FileName_:\=\\!
 
-:StartExploreFile
+rem echo _FileName_=%_FileName_%
 
-
-if defined _SelectedFile_ (
-
-	:: _SelectedFile_ is _SelectedFile_ without the current directory.
-	SET _SelectedFile_=!_SelectedFile_:%CD%\=!
-	
-	rem Unset all variables starting with *.  ASSUMES * is an illegal char in a file name.
-	FOR /F "delims==" %%a In ('set * 2^>Nul') DO SET "%%a="
-
-	set *%_SelectedFile_%=*%_SelectedFile_%
-	
-	:: If the selected file is not the current version...
-	if "%_SelectedFile_%" NEQ "%~1" (
-		:: ...set *%_SelectedFile_% to the _SelectedFile_ parent folder.
-		for /f "tokens=1-2 delims=\" %%f IN ("%_SelectedFile_%") do set *%_SelectedFile_%=%%g
-		:: Now change the value to the corresponding date and time, preceded by the REPO_FLDR and ending with bkp.
-		SET *%_SelectedFile_%=%REPO_FLDR%\\!*%_SelectedFile_%:~4,2!-!*%_SelectedFile_%:~6,2!-!*%_SelectedFile_%:~2,2! !*%_SelectedFile_%:~8,2!.!*%_SelectedFile_%:~10,2!.!*%_SelectedFile_%:~12,2!.bkp
-		:: If *%_SelectedFile_% is a thing, ensure it's writable...
-		if exist "!*%_SelectedFile_%!" attrib -R "!*%_SelectedFile_%!"
-		:: ...so you can copy over it with the selected file...
-		copy "%_SelectedFile_%" "!*%_SelectedFile_%!" /y > Nul
-		:: ...and make it read only.
-		attrib +R "!*%_SelectedFile_%!"
-		:: Ensure the Selected file value begins with *.
-		SET *%_SelectedFile_%=*!*%_SelectedFile_%!
-	)
-
-	set *%_HighlightedFile_%=*%_HighlightedFile_%
-	
-	:: If the highlighted file is not the current version...
-	if "!_HighlightedFile_!" NEQ "%~1" (
-		:: ...set *%_HighlightedFile_% to the _HighlightedFile_ parent folder.
-		for /f "tokens=1* delims=\" %%f IN ("%_HighlightedFile_%") do set *%_HighlightedFile_%=%%g
-		:: Now change the value to the corresponding date and time, preceded by the REPO_FLDR and ending with bkp.
-		SET *%_HighlightedFile_%=%REPO_FLDR%\\!*%_HighlightedFile_%:~4,2!-!*%_HighlightedFile_%:~6,2!-!*%_HighlightedFile_%:~2,2! !*%_HighlightedFile_%:~8,2!.!*%_HighlightedFile_%:~10,2!.!*%_HighlightedFile_%:~12,2!.bkp
-		:: If *%_HighlightedFile_% is a thing, ensure it's writable...
-		if exist "!*%_HighlightedFile_%!" attrib -R "!*%_HighlightedFile_%!"
-		:: ...so you can copy over it with the highlighted file...
-		copy "%_HighlightedFile_%" "!*%_HighlightedFile_%!" /y > Nul
-		:: ...and make it read only.
-		attrib +R "!*%_HighlightedFile_%!"
-		:: Ensure the highlighted file value begins with *.
-		SET *%_HighlightedFile_%=*!*%_HighlightedFile_%!
-	)
-
-	REM Before comparing, alphabetize (chronologize) the two files. ASSUMES REPO_FLDR predates current folder (because it starts with '+').
-	
-	REM Unset _title_, and compare the two titles in alphabetical (chronological) order.  ASSUMES REPO_FLDR starts with +, which precedes any absolute path.
-	set _title_=&FOR /F "tokens=1-2 delims=*" %%a In ('set * 2^>Nul') DO if not defined _title_ (SET _title_=%%b) ELSE CALL :FileCompare "!_title_!" "%%b" "%_DashboardMode_%"
-
-	IF !ERRORLEVEL! EQU 1 SET _FileChanged_=Y
-
-	:: Unset _DashboardMode_
-	SET _DashboardMode_=
-
-	:: Unset _HighlightedFile_
-	SET _HighlightedFile_=
+:: Look for archived versions of _FileName_, and if not found, complain and quit.
+dir "%REPO_FLDR%" /b /s | findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%" > Nul || (
+	ECHO %_FileName_% not archived.
+	PAUSE
+	ENDLOCAL
+	EXIT /B 1
 )
+
+rem Set _Current_ to the Current directory.
+SET _Current_=%CD%
+rem Drop the spaces.
+SET _Current_=%_Current_: =%
+rem Drop the end parentheses (they mess with the for loop).
+SET _Current_=%_Current_:)=%
+rem Count the number of backslashes.
+set backslashes=0&for %%a in (%_Current_:\= %) do set /a backslashes+=1
+
+:: If a default was specified...
+if "%~2" neq "" (
+
+	:: ...make it the control file.
+	SET _Control_=%~2
+
+) else (
+
+	:: Otherwise, set _Control_ to the newest archive of this file, minus the CD.
+	for /f "tokens=%backslashes%* delims=\" %%f in ('dir "%REPO_FLDR%" /b /s /n ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') do set _Control_=%%g
+
+)
+
+::Default _Compare_ to the current version.
+SET _Compare_=
+
+::Look for the newest archive before the _Control_.
+FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
+	IF "%%g" EQU "%_Control_%" GOTO :FoundCompare
+	SET _Compare_=%%g
+)
+
+:FoundCompare
+
+if not defined _Compare_ (
+	::Look for the oldest archive after the _Control_.
+	FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
+		if "%%g" NEQ "%_Control_%" (
+			SET _Compare_=%%g
+			GOTO :CompareFiles
+		)
+	)
+)
+
+:CompareFiles
+
+color 7
+
+cls
 
 call :EchoCenterPad " %~1 " "-"
 
-echo.
+ECHO.
 
-if exist "%REPO_FLDR%\Catalog.tmp" del "%REPO_FLDR%\Catalog.tmp"
+:: Get the differences in the input.
+fc /n "%_Control_%" "%_Compare_%" > "%REPO_FLDR%\Comp.tmp"
 
-powershell -command "& {FUNCTION ASCII {Param([int] $i) if ($i -le 0) {return '';} $r=$i %% 26; if ($r -eq 0) {$r=26;} return $(ASCII (($i-$r)/26)) + [char]($r+64);}; $ctr=1; gci '.\%REPO_FLDR%\' -recurse | resolve-path -Relative | Select-String -Pattern '%_FileName_:\=\\%$' | ForEach-Object {$_ -match '\.\\[^\\]+\\(\d+)\\.+' | out-null; if ('%_DefaultArchive_%' -eq $matches[1]) {$str='--';} else {$str=ASCII($ctr++);} Write-output $('{0} {1}\{2}\{3}' -f $str, '%REPO_FLDR%', $matches[1], '%_FileName_%') | out-file .\%REPO_FLDR%\CATALOG.TMP -Append; if ('%_DefaultArchive_%' -eq $matches[1]) {$str=$str + '>';} else {$str=$str + ')';} $str=$str.PadRight(4); $ts = NEW-TIMESPAN ([DateTime]::ParseExact($matches[1], 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture)) (GET-DATE); if ($ts.days -ne 0) { $str=$str + $ts.days + ' day'; } elseif ($ts.hours -ne 0) { $str=$str + $ts.hours + ' hour'; } else { $str=$str + $ts.minutes + ' minute'; } if (-not ($str -match '[A-Z-]+.\s+1 ')) { $str=$str + 's';} $str+=' ago.'; $str=$str.PadRight(20); gc .\%REPO_FLDR%\Restore.cmd | Where-Object { $_ -match ':{0} (.+)' -f $matches[1] | out-null }; $str + $matches[1];}; $str=ASCII($ctr); '{0})  Current Version' -f $str; Write-output $('{0} {1}' -f $str, '%PJCT_FLDR%\%_FileName_%') | out-file .\%REPO_FLDR%\CATALOG.TMP -Append;}"
+:: If there were no differences, exit 0.
+if !errorlevel! equ 0 echo No differences found.& pause & endlocal & exit /b 0
 
-echo.
+:: From the FC result, print the lines that begin with letters.
+for /f "delims=" %%f in ('type "%REPO_FLDR%\Comp.tmp" ^| FINDSTR /rc:"^[A-Z]"') do echo %%f
+
+:: If _Diff_App_ is not a thing, set CmdLine to the last (only?) line in Diff.ini.
+if not defined _Diff_App_ for /f "delims=" %%f in ('type "!REPO_FLDR!\Diff.ini"') do SET _Diff_App_=%%f
+
+:: If Diff.ini is a thing and DashboardMode is not defined...
+if defined _Diff_App_ if not defined DashboardMode (
+
+	:: Copy the last file to the repo folder.
+	COPY "%_Compare_%" "%REPO_FLDR%\Current.bkp" /Y > Nul
+	
+	:: Set CmdLine to the last (only?) line in Diff.ini.
+	SET CmdLine=!_Diff_App_!
+	:: Replace %1 in the CmdLine with the control file name.
+	SET CmdLine=!CmdLine:%%1=%_Control_:)=^)%!
+	:: Replace %2 in the CmdLine with the compare file name.
+	SET CmdLine=!CmdLine:%%2=%_Compare_:)=^)%!
+
+	:: Use the differencing application, and wait for it to close.
+	start /wait "diff" !CmdLine!
+	
+	cls
+	
+	:: Compare the last file to the repo folder.  If they differ, exit 1.
+	FC "%_Compare_%" "%REPO_FLDR%\Current.bkp" > Nul || endlocal & exit /b 1
+
+	:: Otherwise, exit 0.
+	endlocal
+	exit /b 0
+	
+)
+
+set verbose=
+Set SetNum=1
+:ShowDifference
+
+rem Get the line number of the Control SetNumth difference.
+set oldChange=&for /f "tokens=1-2 delims=]:" %%f in ('findstr /nic:"***** %_Control_%" "%REPO_FLDR%\Comp.tmp" ^| find "*" /n ^| findstr /bc:"[%SetNum%]"') do set oldChange=%%g
+
+if defined oldChange (
+	
+	rem Get the line number of the Compare SetNumth difference.
+	if defined verbose echo _Compare_=%_Compare_:)=^)%
+	if defined verbose echo newChange=!newChange!
+	if defined verbose ECHO on
+	for /f "tokens=1-2 delims=]:" %%f in ('findstr /nic:"***** %_Compare_:)=^)%" "%REPO_FLDR%\Comp.tmp" ^| find "*" /n ^| findstr /bc:"[%SetNum%]"') do set newChange=%%g
+
+	if defined verbose ECHO off
+	
+	if defined verbose echo newChange=!newChange!
+	rem Get the line number of the end of the difference.
+	for /f "tokens=1-2 delims=]:" %%f in ('findstr /nbec:"*****" "%REPO_FLDR%\Comp.tmp" ^| find "*" /n ^| findstr /bc:"[%SetNum%]"') do set endChange=%%g
+
+	if defined verbose echo oldChange=!oldChange!
+	if defined verbose echo endChange=!endChange!
+	
+	:: Get the beginning and ending lines of the old set.
+	SET /a o1=!oldChange!+1
+	SET /a o2=!newChange!-1
+
+	:: Get the beginning and ending lines of the new set.
+	SET /a n1=!newChange!+1
+	SET /a n2=!endChange!-1
+
+	if defined verbose echo o1=!o1!
+	if defined verbose echo o2=!o2!
+	if defined verbose echo n1=!n1!
+	if defined verbose echo n2=!n2!
+	if defined verbose pause
+
+	:: Get the number of columns on the screen.
+	for /f "tokens=1* delims= " %%f in ('mode con ^| find /i "columns"') do set /a cols=%%g - 2
+	set _Line_=
+	for /l %%f in (1,1,%cols%) do set _Line_=!_Line_!-
+	ECHO !_Line_!
+
+	:: Set _OldLine_ to the o1th line in Comp.tmp.
+	for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "!o1!:"') do SET _OldLine_=%%g
+
+	:: Set _NewLine_ to the n1th line in Comp.tmp.
+	for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "!n1!:"') do SET _NewLine_=%%g
+	:: Unless the two lines are equal except line numbers...
+	if "!_OldLine_:~6!" NEQ "!_NewLine_:~6!" (
+		:: ...print the old set in red.
+		if defined verbose echo powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount !o2! | Select-Object -Last (!o2!-!o1!+1) | ForEach-Object {write-host -ForegroundColor red -$_}}"
+		powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount !o2! | Select-Object -Last (!o2!-!o1!+1) | ForEach-Object {write-host -ForegroundColor red -$_}}"
+	) ELSE (
+		:: Otherwise, print the first line in white...
+		if defined verbose echo powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount !n1! | Select-Object -Last 1 | ForEach-Object {write-host '~     '$_.substring(6)}}"
+		powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount !n1! | Select-Object -Last 1 | ForEach-Object {write-host '~     '$_.substring(6)}}"
+		:: ...then print the remainder in red.
+		if defined verbose echo powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount (!o2!-1) | Select-Object -Last (!o2!-!o1!-1) | ForEach-Object {write-host -ForegroundColor red -$_}}"
+		powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount (!o2!-1) | Select-Object -Last (!o2!-!o1!-1) | ForEach-Object {write-host -ForegroundColor red -$_}}"
+	)
+
+	:: Set _OldLine_ to the o2th line in Comp.tmp.  WARNING: The o2th line must be a thing or _OldLine_ will not get overwritten.
+	for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "!o2!:"') do SET _OldLine_=%%g
+	:: Set _NewLine_ to the n2th line in Comp.tmp.  WARNING: The n2th line must be a thing or _NewLine_ will not get overwritten.
+	for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "!n2!:"') do SET _NewLine_=%%g
+
+	:: Unless the two lines are equal except line numbers...
+	if "!_OldLine_:~6!" NEQ "!_NewLine_:~6!" (
+		:: ...print all of the new set in green.
+		if defined verbose echo powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount !n2! | Select-Object -Last (!n2!-!n1!+1) | ForEach-Object {write-host -ForegroundColor green +$_}}"		
+		powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount !n2! | Select-Object -Last (!n2!-!n1!+1) | ForEach-Object {write-host -ForegroundColor green +$_}}"
+	) ELSE (
+		:: Otherwise, print all but the last line in green...
+		powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount (!n2!-1) | Select-Object -Last (!n2!-!n1!-1) | ForEach-Object {write-host -ForegroundColor green +$_}}"
+		:: ...then print the remainder in white.
+		powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount (!newChange!-1) | Select-Object -Last 1 | ForEach-Object {write-host '~     '$_.substring(6)}}"
+	)
+	
+	:: Increment SetNum
+	SET /a SetNum+=1
+	
+	:: Loop
+	GOTO :ShowDifference
+)
 
 rem Unset all variables starting with ?.  ASSUMES ? is an illegal char in a file name.
 FOR /F "delims==" %%a In ('set ? 2^>Nul') DO SET "%%a="
 
-SET cnt=0
+rem Set the CURRENT TimeStamp
+SET CURRENT=&CALL :TIMESTAMP CURRENT
 
-set dft=%PJCT_FLDR%
-if defined _DefaultArchive_ set dft=%REPO_FLDR%\%_DefaultArchive_%
+rem Unset the count.
+set /A cnt=0
 
-rem For 1 to counter, add the character to the beginning and end of the input.
-rem FOR /L %%? IN (0,1,%len%) DO SET txt=!c!!txt!!c!
+rem Unset the character.
+set chr=
 
-SET Desc=Current Version.
+echo.
 
-for /f "tokens=1* delims= " %%L in ('type "%REPO_FLDR%\catalog.tmp"') do (
-	REM if '%%L' NEQ '--' (
-		REM ECHO %%M...
-		set ?%%L?=%%M
-		if "!dft!\!_FileName_!" NEQ "%%M" (
-			set /a cnt+=1
-			set chr=%%L
-		) ELSE (
-			REM PAUSE
-			if "%%M" equ "Current Version" (
-				SET _HighlightedFile_=%~1
-			) else (
-				SET _HighlightedFile_=%%M
-				for /f "tokens=1-2 delims=\" %%F in ('type "!REPO_FLDR!\CATALOG.TMP" ^| findstr /BIC:%%L ') do (for /F "tokens=1* delims= " %%A in ('type "!REPO_FLDR!\Restore.cmd" ^| findstr /BC:":%%G"') do SET Desc=%%B)
-			)
-		)
-	REM )
+rem Look through the archives for (relative) _FileName_
+for /f "tokens=%backslashes%* delims=\" %%f in ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') do (
+
+	CALL :ASCII !cnt! chr
+
+	set ?!chr!?=%%g
+	
+	set /a cnt+=1
+
 )
 
-REM ECHO %dft%\%_FileName_%...
-REM PAUSE
+rem If the actual file exists...
+if exist %PJCT_FLDR%%~1 (
+
+	rem ...get the ASCII...
+	CALL :ASCII !cnt! chr
+
+	rem ...and set it to Current Version.
+	set ?!chr!?=%PJCT_FLDR%%~1
+	
+	set /a cnt+=1
+)
+
+FOR /F "delims==?" %%a In ('set ? 2^>Nul') DO (
+
+	rem Set str to Current Version.
+	SET dsc=Current Version
+	SET str=
+
+	rem If the file is a repo file...
+	echo !?%%a?!|findstr /brc:"[A-Z]:">nul || (
+
+		SET ARCHIVE=!?%%a?!
+		for /f "tokens=1-2* delims=\" %%f in ('echo !archive!') do set ARCHIVE=%%g
+
+		rem ...if the dates are not the same...
+		if "!CURRENT:~0,8!" NEQ "!ARCHIVE:~0,8!" (
+			CALL :JDate d1 !ARCHIVE:~4,2!/!ARCHIVE:~6,2!/!ARCHIVE:~0,4!
+			CALL :JDate d2 !CURRENT:~4,2!/!CURRENT:~6,2!/!CURRENT:~0,4!
+			SET /A diff=!d2!-!d1!
+			set str=!diff! day
+			if !diff! NEQ 1 set str=!str!s
+		) ELSE (
+			CALL :JTime t1 !ARCHIVE:~8,8!
+			CALL :JTime t2 !CURRENT:~8,8!
+			SET /A diff=!t2!-!t1!
+			if !diff! LSS 3600 (
+				set /a diff=!diff! / 60
+				set str=!diff! minute
+			) else (
+				set /a diff=!diff! / 3600
+				set str=!diff! hour
+			)
+			if !diff! NEQ 1 SET str=!str!s
+		)
+		
+		rem Pad right the string.
+		set str=!str! ago.           &set str=!str:~0,15!
+			
+		rem Add the description to the end of the string.
+		for /f "tokens=1* delims= " %%f in ('findstr /bc:":!ARCHIVE:~0,16!" "!REPO_FLDR!\Restore.cmd"') do set dsc=%%g
+
+	)
+
+	if "%_Control_%" equ "!?%%a?!" (
+		powershell -command "& {write-host -BackgroundColor white -ForegroundColor black '%%a) !str!!dsc!'}"
+	) else (
+		if "%_Compare_%" equ "!?%%a?!" (
+			powershell -command "& {write-host -BackgroundColor gray -ForegroundColor black '%%a) !str!!dsc!'}"
+			SET Desc=!dsc!
+		) else (
+			echo %%a^) !str!!dsc!
+		)
+	)
+)	
+echo.
 
 if %cnt% == 0 pause & endlocal & cls & color 1F & exit /b 0
 
@@ -1343,7 +1496,6 @@ set /p rsp=or nothing to return:
 cls
 :: If the user entered nothing, clean the repository folder and return.
 if not defined rsp (
-	del "%REPO_FLDR%\CATALOG.tmp" >Nul
 	del "%REPO_FLDR%\*.bkp" /F /Q >Nul
 	color 1F
 	if defined _FileChanged_ (endlocal & exit /b 1)
@@ -1351,165 +1503,18 @@ if not defined rsp (
 	exit /b 0
 )
 
-:: Get the selected file, and if the response includes -, we have a new Highlighted file.
+:: Get the selected file, and if the response includes -, we have a new second file.
 for /f "tokens=1-2" %%f in ("%rsp:-= %") do (
-	SET _SelectedFile_=!?%%f?!
-	if defined ?%%g? SET _HighlightedFile_=!?%%g?!
+	SET _Control_=!?%%f?!
+	if defined ?%%g? SET _Compare_=!?%%g?!
 )
+
+if not defined _Control_ echo File not found.&PAUSE&endlocal&exit /b 0
+if not defined _Compare_ echo File not found.&PAUSE&endlocal&exit /b 0
+if "%_Control_%" equ "%_Compare_" echo Please specify multiple files.&PAUSE&endlocal&exit /b 0
 
 :: Refresh the menu.
-if not defined _SelectedFile_ (
-	echo.
-	echo Selected file not found.
-	pause
-)
-
-GOTO :StartExploreFile
-
-:FileCompare <File1> <File2> <File3/DashboardMode>
-setlocal enabledelayedexpansion
-
-Set Verbose=
-
-:: Unset DashboardMode.
-Set DashboardMode=
-
-:: If the third arg is specified and it's not a file, set DashboardMode.
-if '%~3' NEQ '' if not exist "%~3" SET DashboardMode=Y
-
-REM cls
-
-ECHO.
-
-:: Get the differences in the input.
-fc /n %1 %2 > "%REPO_FLDR%\Comp.tmp"
-:: From the FC result, print the lines that begin with letters.
-for /f "delims=" %%f in ('type "%REPO_FLDR%\Comp.tmp" ^| FINDSTR /rc:"^[A-Z]"') do echo %%f
-:: If there were no differences, exit 0.
-if !errorlevel! equ 0 endlocal & exit /b 0
-
-:: If _Diff_App_ is not a thing, set CmdLine to the last (only?) line in Diff.ini.
-if not defined _Diff_App_ for /f "delims=" %%f in ('type "!REPO_FLDR!\Diff.ini"') do SET _Diff_App_=%%f
-
-:: If Diff.ini is a thing and DashboardMode is not defined...
-if defined _Diff_App_ if not defined DashboardMode (
-
-	:: Copy the last file to the repo folder.
-	COPY "%~2" "%REPO_FLDR%\Current.bkp" /Y > Nul
-	
-	:: Set CmdLine to the last (only?) line in Diff.ini.
-	SET CmdLine=!_Diff_App_!
-	:: Replace %1 in the CmdLine with the first file name.
-	SET CmdLine=!CmdLine:%%1=%1!
-	:: Replace %2 in the CmdLine with the second file name.
-	SET CmdLine=!CmdLine:%%2=%2!
-
-	:: Use the differencing application, and wait for it to close.
-	start /wait "diff" !CmdLine!
-	
-	cls
-	
-	:: Compare the last file to the repo folder.  If they differ, exit 1.
-	FC "%~2" "%REPO_FLDR%\Current.bkp" > Nul || endlocal & exit /b 1
-
-	:: Otherwise, exit 0.
-	endlocal
-	exit /b 0
-	
-)
-
-rem Make a space delimited list of numbers of each line in Comp.tmp beginning with "***** %~2"
-SET NewList=&for /f "delims=[]" %%f IN ('TYPE "%REPO_FLDR%\Comp.tmp" ^| find /n /i "***** %~2"') DO SET NewList=!NewList!%%f 
-rem Add . to the end of NewList.
-SET NewList=!NewList!.
-
-If defined Verbose echo NewList=!NewList!
-
-rem Make a space delimited list of numbers of each line in Comp.tmp beginning with "***** %~1"
-SET OldList=&for /f "delims=[]" %%f IN ('TYPE "%REPO_FLDR%\Comp.tmp" ^| find /n /i "***** %~1"') DO SET OldList=!OldList!%%f 
-rem Add . to the end of OldList.
-SET OldList=!OldList!.
-
-If defined Verbose echo OldList=!OldList!
-
-rem Make a space delimited list of numbers of each line in Comp.tmp of the other lines beginning with "*****"
-SET EndList=&for /f "delims=:" %%f IN ('TYPE "%REPO_FLDR%\Comp.tmp" ^| findstr /NBE "*****"') DO SET EndList=!EndList!%%f 
-rem Add . to the end of EndList.
-SET EndList=!EndList!.
-
-If defined Verbose echo EndList=!EndList!
-
-If defined Verbose pause
-
-Set SetNum=1
-:StartCompares
-rem echo SetNum=!SetNum!
-rem Get the next line number in NewList and if the result is the end of the list, pause and quit.
-for /f "tokens=%SetNum%" %%f in ("!NewList!") do if "%%f" NEQ "." (set n=%%f) ELSE (ECHO.&ENDLOCAL&GOTO :EOF)
-
-rem Get the next line number in OldList.
-for /f "tokens=%SetNum%" %%f in ("!OldList!") do set o=%%f
-
-rem Get the next line number in EndList.
-for /f "tokens=%SetNum%" %%f in ("!EndList!") do set _end_=%%f
-
-:: Get the beginning and ending lines of the old set.
-SET /a o1=%o%+1
-SET /a o2=%n%-1
-
-:: Get the beginning and ending lines of the new set.
-SET /a n1=%n%+1
-SET /a n2=%_end_%-1
-
-:: Get the number of columns on the screen.
-for /f "tokens=1* delims= " %%f in ('mode con ^| find /i "columns"') do set /a cols=%%g - 2
-
-set _Line_=
-for /l %%f in (1,1,%cols%) do set _Line_=!_Line_!-
-ECHO %_Line_%
-
-:: Set _OldLine_ to the o1th line in Comp.tmp.
-for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "%o1%:"') do SET _OldLine_=%%g
-:: Set _NewLine_ to the n1th line in Comp.tmp.
-for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "%n1%:"') do SET _NewLine_=%%g
-
-if defined Verbose echo OldLine(!o1!): !_OldLine_!
-if defined Verbose echo NewLine(!n1!): !_NewLine_!
-
-:: Unless the two lines are equal except line numbers...
-if "!_OldLine_:~6!" NEQ "!_NewLine_:~6!" (
-	:: ...print the old set in red.
-	powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount %o2% | Select-Object -Last (%o2%-%o1%+1) | ForEach-Object {write-host -ForegroundColor red -$_}}"
-) ELSE (
-	:: Otherwise, print the first line in white...
-	powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount %n1% | Select-Object -Last 1 | ForEach-Object {write-host '~     '$_.substring(6)}}"
-	:: ...then print the remainder in red.
-	powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount (%o2%-1) | Select-Object -Last (%o2%-%o1%-1) | ForEach-Object {write-host -ForegroundColor red -$_}}"
-)
-
-:: Set _OldLine_ to the o2th line in Comp.tmp.  WARNING: The o2th line must be a thing or _OldLine_ will not get overwritten.
-for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "%o2%:"') do SET _OldLine_=%%g
-:: Set _NewLine_ to the n2th line in Comp.tmp.  WARNING: The n2th line must be a thing or _NewLine_ will not get overwritten.
-for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Comp.tmp" ^| findstr /b "%n2%:"') do SET _NewLine_=%%g
-
-REM echo "!_OldLine_:~6!" NEQ "!_NewLine_:~6!"?
-
-:: Unless the two lines are equal except line numbers...
-if "!_OldLine_:~6!" NEQ "!_NewLine_:~6!" (
-	:: ...print all of the new set in green.
-	powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount %n2% | Select-Object -Last (%n2%-%n1%+1) | ForEach-Object {write-host -ForegroundColor green +$_}}"
-) ELSE (
-	:: Otherwise, print all but the last line in green...
-	powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount (%n2%-1) | Select-Object -Last (%n2%-%n1%-1) | ForEach-Object {write-host -ForegroundColor green +$_}}"
-	:: ...then print the remainder in white.
-	powershell -command "& {gc "%REPO_FLDR%\Comp.tmp" -TotalCount (%n%-1) | Select-Object -Last 1 | ForEach-Object {write-host '~     '$_.substring(6)}}"
-)
-
-:: Increment SetNum
-SET /a SetNum+=1
-
-:: Loop
-GOTO :StartCompares
+GOTO :CompareFiles
 
 :: Exit 0.
 endlocal
@@ -1544,20 +1549,31 @@ IF %inp% GEQ 26 (
 endlocal & set %2=^%character%
 GOTO :EOF
 
-:jtime JD DateStr -- converts a time string to number of seconds since midnight
+:jTime JT DateStr -- converts a time string to number of seconds since midnight
 ::                -- JT      [out,opt] - julian time
 ::                -- TimeStr [in,opt]  - time string, e.g. "3:31:20 PM"
 SETLOCAL
 
-set TimeStr=%~2&if "%~2"=="" set TimeStr=%time%
-rem Get the current time.
-For /f "tokens=1-5 delims=/:. " %%a in ("%TimeStr%") do (
-	SET HH=%%a
-	SET MM=%%b
-	SET SS=%%c
-	SET MilliSeconds=%%d
-	SET Meridian=%%e
+set TimeStr=%~2
+if "%~2" EQU "" set TimeStr=%time%
+set Meridian=
+for /f "tokens=1* delims= " %%a in ("%~2") do (
+	set TimeStr=%%a
+	set Meridian=%%b
 )
+
+rem Strip the colons from the string.
+Set TimeStr=%TimeStr::=%"
+rem Strip the periods from the string.
+Set TimeStr=%TimeStr:.=%"
+
+rem If the result is 5 characters, pad left with a 0.
+If "%TimeStr%" EQU "%TimeStr:~7%" set TimeStr=0%TimeStr%
+
+Set HH=%TimeStr:~0,2%
+Set MM=%TimeStr:~2,2%
+Set SS=%TimeStr:~4,2%
+
 SET /a "HH=100%HH% %% 100,MM=100%MM% %% 100,SS=100%SS% %% 100"
 IF '%Meridian%' EQU 'PM' SET /a HH=%HH%+12
 SET /a JT=%HH%*3600+%MM%*60+%SS%
@@ -1718,12 +1734,10 @@ rem Escape all parentheses in the Filter.
 SET Filter=!Filter:^)=^\^)!
 SET Filter=!Filter:^(=^\^(!
 
-rem echo Filter:!Filter!
-
 rem Run the PowerShell command.
-rem echo powershell -command "& {$Count=( %CmdLine% | where fullname -notmatch '!Filter!' | Measure-Object).Count; $I=0; %CmdLine% | where fullname -notmatch '!Filter!' | foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
+rem echo powershell -command "& {$Count=( !CmdLine! | where fullname -notmatch '!Filter!' | Measure-Object).Count; $I=0; !CmdLine! | where fullname -notmatch '!Filter!' | foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
 rem pause
-powershell -command "& {$Count=( %CmdLine% | where fullname -notmatch '!Filter!' | Measure-Object).Count; $I=0; %CmdLine% | where fullname -notmatch '!Filter!' | foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
+powershell -command "& {$Count=( !CmdLine! | where fullname -notmatch '!Filter!' | Measure-Object).Count; $I=0; !CmdLine! | where fullname -notmatch '!Filter!' | foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
 
 endlocal
 EXIT /b
