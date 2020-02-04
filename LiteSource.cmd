@@ -310,15 +310,7 @@ rem CALL :strLen "%CD%\%REPO_FLDR%\" len
 (
 ECHO @ECHO OFF
 ECHO SET NoArgs=
-ECHO IF '%%1' EQU '' SET NoArgs=Y
-ECHO.
-ECHO SETLOCAL ENABLEDELAYEDEXPANSION
-ECHO.
-ECHO SET REPO_FLDR=%%~dp0
-ECHO.
-ECHO SET PJCT_FLDR=%INCL_FLDR%
-ECHO.
-ECHO GOTO :Start
+ECHO IF '%%1' NEQ '' (GOTO :Prepare^) ELSE SET NoArgs=Y
 ECHO :Help
 ECHO ECHO Restores a project folder, or updates an archive folder.
 ECHO ECHO.
@@ -341,12 +333,17 @@ ECHO ECHO	D^) Fill a folder with only updated/added files.  e.g. Restore C:\Arch
 ECHO ECHO.
 ECHO IF DEFINED NoArgs PAUSE
 ECHO GOTO :EOF
-ECHO :Start
+ECHO :Prepare
+ECHO SETLOCAL ENABLEDELAYEDEXPANSION
+ECHO SET REPO_FLDR=%%~dp0
+ECHO SET PJCT_FLDR=%INCL_FLDR%
 ECHO SET _Confirmed=
 ECHO SET _verb_=restore
-ECHO SET _Target=
-ECHO SET _Backup=
+ECHO SET _Target_=
+ECHO SET _Archive_=
 ECHO :Top
+ECHO rem If no more arguments, start.
+ECHO IF '%%1' EQU '' GOTO :Start
 ECHO rem If the argument is /? goto Help.
 ECHO IF '%%1' EQU '/?' GOTO :Help
 ECHO rem If the argument is /Y remember to update or restore without prompts.
@@ -358,63 +355,63 @@ ECHO IF '%%1' EQU '/U' SET _verb_=update^&SHIFT^&GOTO :Top
 ECHO rem If the argument is /u remember to update, not restore.
 ECHO IF '%%1' EQU '/u' SET _verb_=update^&SHIFT^&GOTO :Top
 ECHO rem If the target folder is not a thing but the argument is, set the target folder.
-ECHO IF '%%1' NEQ '' IF NOT DEFINED _Target SET _Target=%%1^&SHIFT^&GOTO :Top
-ECHO rem If the target folder is a thing but the archive folder is and the argument is, set the backup folder.
-ECHO IF '%%1' NEQ '' IF DEFINED _Target SET _Backup=%%1^&SHIFT^&GOTO :Top
+ECHO IF NOT DEFINED _Target_ SET _Target_=%%1^&SHIFT^&GOTO :Top
+ECHO rem Otherwise, if the archive folder is not a thing but the argument is, set the archive folder.
+ECHO IF NOT DEFINED _Archive_ SET _Archive_=%%1^&SHIFT^&GOTO :Top
 ECHO rem If a Target folder is not specified, quit gracefully.
 ECHO GOTO :Help
-ECHO rem If the Target folder doesn't exist...
+ECHO :Start
 ECHO rem Take the single quotes from the Target folder name.
-ECHO SET _Target=%%_Target:'=%%
+ECHO SET _Target_=%%_Target_:'=%%
 ECHO rem Take the double quotes from the Target folder name.
-ECHO SET _Target=%%_Target:"=%%
+ECHO SET _Target_=%%_Target_:"=%%
 ECHO rem If specified target is not an existing folder...
-ECHO DIR /b /ad "%%_Target%%" ^| FIND /i "File Not Found" ^&^& (
+ECHO DIR /b /ad "%%_Target_%%" ^| FIND /i "File Not Found" ^&^& (
 ECHO    rem ...and confirmation is required...
 ECHO    If NOT DEFINED _Confirmed (
 ECHO        rem ...ask if you can create the target folder...
-ECHO        CHOICE /M "Folder not found '%%_Target%%'.  Create it"
+ECHO        CHOICE /M "Folder not found '%%_Target_%%'.  Create it"
 ECHO        rem ...and if you can't, quit...
 ECHO        IF ^^!ERRORLEVEL^^! EQU 2 EXIT /B 1
 ECHO    ^)
 ECHO    rem ...otherwise, create the Target folder.
-ECHO    MD "%%_Target%%"
+ECHO    MD "%%_Target_%%"
 ECHO ^)
 ECHO.
-ECHO rem If the user is updating and a Backup is not specified...
-ECHO IF '%%_verb_%%' == 'update' IF NOT DEFINED _Backup (
-ECHO     rem ...find the second backup from Restore.cmd and get the archive folder name...
-ECHO     for /f "tokens=1-2 delims=: " %%%%f in ('findstr /r ":[0-9][0-9]*" "%%~f0" ^^^| find ":" /n ^^^| findstr /b "[2]:"'^) DO SET _Backup=%%%%g
-ECHO     rem ...and if _Backup is still not a thing (no second backup in Restore.cmd^), warn the user and quit.
-ECHO     IF NOT DEFINED _Backup ECHO Please specify an existing archive to update.^&PAUSE^&EXIT /B 1
+ECHO rem If the user is updating and an archive is not specified...
+ECHO IF '%%_verb_%%' == 'update' IF NOT DEFINED _Archive_ (
+ECHO     rem ...find the second archive from Restore.cmd and get the archive folder name...
+ECHO     for /f "tokens=1-2 delims=: " %%%%f in ('findstr /r ":[0-9][0-9]*" "%%~f0" ^^^| find ":" /n ^^^| findstr /b "[2]:"'^) DO SET _Archive_=%%%%g
+ECHO     rem ...and if _Archive_ is still not a thing (no second backup in Restore.cmd^), warn the user and quit.
+ECHO     IF NOT DEFINED _Archive_ ECHO Please specify an existing archive to update.^&PAUSE^&EXIT /B 1
 ECHO ^)
 ECHO.
 ECHO SET AdditionalWhere=
-ECHO If defined _Backup (
+ECHO If defined _Archive_ (
 ECHO    if "%%_verb_%%" == "update" (
-ECHO        Set AdditionalWhere=$arc -ge %%_Backup%% -and 
+ECHO        Set AdditionalWhere=$arc -ge %%_Archive_%% -and 
 ECHO    ^) else (
-ECHO        Set AdditionalWhere=$arc -le %%_Backup%% -and 
+ECHO        Set AdditionalWhere=$arc -le %%_Archive_%% -and 
 ECHO    ^)
 ECHO ^)
 ECHO.
 ECHO rem If the target is not defined, set it to the PJCT_FLDR.
-ECHO IF NOT DEFINED _Target SET _Target=%%PJCT_FLDR%%
+ECHO IF NOT DEFINED _Target_ SET _Target_=%%PJCT_FLDR%%
 ECHO rem ASSUME if you can read this and PJCT_FLDR is not a thing, it's the parent directory.
-ECHO IF NOT DEFINED _Target FOR %%%%a IN ("%%REPO_FLDR:~0,-1%%"^) DO SET _Target=%%%%~dpa
+ECHO IF NOT DEFINED _Target_ FOR %%%%a IN ("%%REPO_FLDR:~0,-1%%"^) DO SET _Target_=%%%%~dpa
 ECHO rem Escape the Regex Metacharacters that are legal in a windows file path.
-ECHO SET _Target=%%_Target:\=\\%%
-ECHO SET _Target=%%_Target:+=\+%%
-ECHO SET _Target=%%_Target:^^=^^^^%%
-ECHO SET _Target=%%_Target:$=\$%%
-ECHO SET _Target=%%_Target:.=\.%%
-ECHO SET _Target=%%_Target:"=%%
+ECHO SET _Target_=%%_Target_:\=\\%%
+ECHO SET _Target_=%%_Target_:+=\+%%
+ECHO SET _Target_=%%_Target_:^^=^^^^%%
+ECHO SET _Target_=%%_Target_:$=\$%%
+ECHO SET _Target_=%%_Target_:.=\.%%
+ECHO SET _Target_=%%_Target_:"=%%
 ECHO.
 ECHO SET _Confirm_=
 ECHO IF NOT DEFINED _Confirmed SET _Confirm_= foreach ($result in $results.GetEnumerator(^)^) {if ($result.Value -eq ''^^^) {Write-Host Delete $result.Name} else {$msg='Update {0} from {1}' -f $result.Name, [DateTime]::ParseExact($result.Value, 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture^^^); Write-Host $msg}}; $resp = Read-Host 'Enter Y to continue'; if ($resp.ToUpper(^^^) -ne 'Y'^^^) {exit 1;}
 ECHO.
 ECHO echo.
-ECHO powershell -command "& {$Files = @{}; gc '%%REPO_FLDR%%Restore.cmd' | foreach-object { if ($_ -match ':(\d+)') {$arc=$matches[1]} else {if (%%AdditionalWhere%%$_ -match ':: (\w+) ""(.+)""""') {if ($matches[1] -eq 'Deleted') {$Files[$matches[2]]='';} else {$Files[$matches[2]]=$arc;} } } }; $I=0; $results=@{}; foreach ($k in $Files.Keys) {$I++; Write-Progress -Activity ('Scanning {0} files' -f $Files.Count) -Status $k -PercentComplete($I/$Files.Count*100); if (&{if ($Files.Item($k) -eq '') {Test-Path ('%%_Target%%' + $k)} else {(-not (Test-Path ('%%_Target%%\' + $k)) -or (Get-filehash $('%%REPO_FLDR%%\' + $Files.Item($k) + $k)).hash -ne (get-filehash $('%%_Target%%\' + $k)).hash)} }) {$results.Add($k, $Files.Item($k));}} if ($results.length -eq 0) {Write-Host No changes made.; exit 1;} %%_Confirm_%% foreach ($result in $results.GetEnumerator()) {$dst='%%_Target%%{0}' -f $result.Name; if ($result.Value -ne '') {$src='%%REPO_FLDR%%{0}{1}' -F $result.Value, $result.Name; New-Item -ItemType File -Path ""$dst"""" -force | out-null; Copy-Item ""$src"""" -Destination ""$dst"""" -force} else {if (Test-Path ""$dst"""") {Remove-Item ""$dst""""}}}; Write-Host Folder updated.;}"
+ECHO powershell -command "& {$Files = @{}; gc '%%REPO_FLDR%%Restore.cmd' | foreach-object { if ($_ -match ':(\d+)') {$arc=$matches[1]} else {if (%%AdditionalWhere%%$_ -match ':: (\w+) ""(.+)""""') {if ($matches[1] -eq 'Deleted') {$Files[$matches[2]]='';} else {$Files[$matches[2]]=$arc;} } } }; $I=0; $results=@{}; foreach ($k in $Files.Keys) {$I++; Write-Progress -Activity ('Scanning {0} files' -f $Files.Count) -Status $k -PercentComplete($I/$Files.Count*100); if (&{if ($Files.Item($k) -eq '') {Test-Path ('%%_Target_%%' + $k)} else {(-not (Test-Path ('%%_Target_%%\' + $k)) -or (Get-filehash $('%%REPO_FLDR%%\' + $Files.Item($k) + $k)).hash -ne (get-filehash $('%%_Target_%%\' + $k)).hash)} }) {$results.Add($k, $Files.Item($k));}} if ($results.length -eq 0) {Write-Host No changes made.; exit 1;} %%_Confirm_%% foreach ($result in $results.GetEnumerator()) {$dst='%%_Target_%%{0}' -f $result.Name; if ($result.Value -ne '') {$src='%%REPO_FLDR%%{0}{1}' -F $result.Value, $result.Name; New-Item -ItemType File -Path ""$dst"""" -force | out-null; Copy-Item ""$src"""" -Destination ""$dst"""" -force} else {if (Test-Path ""$dst"""") {Remove-Item ""$dst""""}}}; Write-Host Folder updated.;}"
 ECHO.
 ECHO if %%errorlevel%% == 1 exit /B 1
 ECHO exit /B 0
