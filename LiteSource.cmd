@@ -385,7 +385,9 @@ echo.
 
 :NoArchives
 
-CALL :PopulateExclude
+CALL :GetExcludePatterns exclude
+
+if defined exclude set "exclude=^| where fullname -notmatch '!exclude!' "
 
 rem echo powershell -command "& gci '%PJCT_FLDR%' -Recurse !exclude!| ForEach-Object {$cnt+=1; $sum+=$_.Length;}; Write-Host ('Found {0} MB in {1} files in %PJCT_FLDR%' -f ($sum / 1MB), $cnt)"
 rem pause
@@ -410,8 +412,9 @@ if "!Msg!" EQU "^!" CALL :ExcludePatterns & cls & color 1f & GOTO :NoArchives
 rem If the user typed something 5 chars or shorter, return to NoArchives.
 IF "%Msg%" EQU "%Msg:~0,6%" cls & GOTO :NoArchives
 
-rem If Restore.cmd is a thing...
+rem Unless Restore.cmd is a thing...
 if not exist "%REPO_FLDR%\Restore.cmd" (
+(
 ECHO @ECHO OFF
 ECHO SET NoArgs=
 ECHO IF '%%1' NEQ '' (GOTO :Prepare^) ELSE SET NoArgs=Y
@@ -440,7 +443,8 @@ ECHO GOTO :EOF
 ECHO :Prepare
 ECHO SETLOCAL ENABLEDELAYEDEXPANSION
 ECHO SET REPO_FLDR=%%~dp0
-IF %PJCT_FLDR% EQU %CD% (ECHO SET PJCT_FLDR=) ELSE ECHO PJCT_FLDR=%PJCT_FLDR%
+IF "%PJCT_FLDR%" EQU "%CD%" ECHO SET PJCT_FLDR=
+IF "%PJCT_FLDR%" NEQ "%CD%" ECHO SET PJCT_FLDR=%PJCT_FLDR%
 ECHO SET _Confirmed=
 ECHO SET _verb_=restore
 ECHO SET _Target_=
@@ -521,7 +525,7 @@ ECHO if %%errorlevel%% == 1 exit /B 1
 ECHO exit /B 0
 ECHO.
 )>"%REPO_FLDR%\Restore.cmd"
-
+)
 :: Delete New.txt if necessary.
 if exist "%REPO_FLDR%\New.txt" del "%REPO_FLDR%\New.txt"
 
@@ -656,9 +660,15 @@ If NOT EXIST "%REPO_FLDR%\New.txt" (
 	rem pause
 ) ELSE (
 
+	CALL :GetExcludePatterns exclude
+
+	if defined exclude SET exclude=^| where InputObject -notmatch {!exclude!} &rem
+	
 	:: Otherwise, find the differences between Old.txt and New.txt, change >= to > and <= to < in case = is in the file name, and save to Diff.tmp...
 	rem TODO When the folder is empty, New.txt is null!!!  Add a line so no crashee.
-	powershell -Command "& {Compare-Object (Get-Content '%REPO_FLDR%\Old.txt') (Get-Content '%REPO_FLDR%\New.txt') | ft inputobject, @{n='file';e={ if ($_.SideIndicator -eq '=>') { '>' }  else { '<' } }} | out-file -width 1000 '%REPO_FLDR%\Diff.tmp'}" 
+	rem echo powershell -Command "& {Compare-Object (Get-Content '%REPO_FLDR%\Old.txt') (Get-Content '%REPO_FLDR%\New.txt') !exclude!| ft inputobject, @{n='file';e={ if ($_.SideIndicator -eq '=>') { '>' }  else { '<' } }} | out-file -width 1000 '%REPO_FLDR%\Diff.tmp'}" 
+	rem pause
+	powershell -Command "& {Compare-Object (Get-Content '%REPO_FLDR%\Old.txt') (Get-Content '%REPO_FLDR%\New.txt') !exclude!| ft inputobject, @{n='file';e={ if ($_.SideIndicator -eq '=>') { '>' }  else { '<' } }} | out-file -width 1000 '%REPO_FLDR%\Diff.tmp'}" 
 
 	:: ...and if any are found...
 	FOR %%A IN ("%REPO_FLDR%\Diff.tmp") DO IF %%~zA EQU 0 GOTO :CloseCommit
@@ -669,18 +679,21 @@ If NOT EXIST "%REPO_FLDR%\New.txt" (
 	:: For each filename in Old.txt, if it's not in New.txt, flag it as deleted. ASSUMES filenames in Old.txt are delimited by "
 	if not defined _NothingIsDeleted_ for /f delims^=^" %%f IN ('type "%REPO_FLDR%\Diff.tmp" ^| findstr ^^^<') do type "!REPO_FLDR!\Diff.tmp" | findstr ^> | findstr /C:"%%f" > Nul || SET ?%%f?=?Deleted
 	
-	rem For each filename in New.txt, if it's in Old.txt, flag it as updated.  Otherwise, flag it as created.
+	:: For each filename in New.txt, if it's in Old.txt, flag it as updated.  Otherwise, flag it as created.
 	for /f delims^=^" %%f IN ('type "%REPO_FLDR%\Diff.tmp" ^| findstr ^^^>') do type "!REPO_FLDR!\Diff.tmp" | findstr ^< | findstr /C:"%%f" > Nul && SET ?%%f?=?Updated || SET ?%%f?=?Created
 
 	:: Now, for each variable that starts with ?, use the var (filename) and value (Created/Updated/Deleted) to append Commit.cmd.
-	FOR  /F "tokens=1-3 delims=?" %%a In ('set ? 2^>Nul') DO CALL :AppendCommit ChangeCount %%c "%%a"
+	FOR  /F "tokens=1-3 delims=?" %%f In ('set ? 2^>Nul') DO CALL :AppendCommit ChangeCount %%h "%%f"
 	
 )
 
 :CloseCommit
 rem TODO: What if folders are in New.txt but not Old.txt?
 
+call :ASCII %ChangeCount% chr
 (
+ECHO.
+ECHO :%chr%^)
 ECHO rem For each deleted file, tell Restore.cmd to unset the var.
 ECHO FOR /F "tokens=1-3 delims=?" %%%%a In ('set ? 2^^^>Nul'^) DO ECHO SET ?%%%%a?=^>^>"%REPO_FLDR%\Restore.cmd"
 ECHO rem Tell Restore.cmd to return.
@@ -714,7 +727,7 @@ for /f %%a in ('findstr /r ":[0-9][0-9]*" "%REPO_FLDR%\Restore.cmd"^|find ":" /c
 
 if i NEQ 0 (
 	ECHO.
-	powershell -command "& {$ctr=0; (gc .\%REPO_FLDR%\Restore.cmd) | ForEach-Object { if ($_ -match ':(\d+) (.+)') {$ts = NEW-TIMESPAN ([DateTime]::ParseExact($matches[1], 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture)) (GET-DATE); $ctr++; $line=([string]$ctr) + ')'; $line=$line.PadRight(5); $q=$ts.minutes; $i=' minute'; if ($ts.days -ne 0) { $q=$ts.days; $i=' day';} else {if ($ts.hours -ne 0) { $q=$ts.hours; $i=' hour';}} if ($q -ne 1) {$i+='s'} $line=$line + $q + $i + ' ago.'; Write-Host $line.PadRight(20) $matches[2];}}}"
+	powershell -command "& {$ctr=0; (gc '.\%REPO_FLDR%\Restore.cmd') | ForEach-Object { if ($_ -match ':(\d+) (.+)') {$ts = NEW-TIMESPAN ([DateTime]::ParseExact($matches[1], 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture)) (GET-DATE); $ctr++; $line=([string]$ctr) + ')'; $line=$line.PadRight(5); $q=$ts.minutes; $i=' minute'; if ($ts.days -ne 0) { $q=$ts.days; $i=' day';} else {if ($ts.hours -ne 0) { $q=$ts.hours; $i=' hour';}} if ($q -ne 1) {$i+='s'} $line=$line + $q + $i + ' ago.'; Write-Host $line.PadRight(20) $matches[2];}}}"
 )
 
 ECHO.
@@ -990,54 +1003,49 @@ GOTO :EOF
 
 :AppendCommit Number Verb Filename
 ::            Number [in/out] -- The 1-based index number that applies to this update.
-::            Verb [in] -- The verb that applies to this update (e.g. "Created", "Deleted", "Modified").
-::            Filename [in] -- The filename that applies to this update.
+::            Verb [in] -- The verb that applies to this update (e.g. "Created", "Deleted", "Updated").
+::            Filename [in] -- The absolute name of the file to update.
 
 SETLOCAL EnableDelayedExpansion
-rem echo Entering AppendCommit %1 %2 %3
-FOR /f "delims=" %%f IN (%3) DO (
-	rem Remember the Filename's name and extension.
-	SET fln=%%~nxf
-	rem Remember the Filename's drive and path, surrounded by ".
-	SET src="%%~dpf"
-	rem Drop the trailing \.
-	SET src=!src:\"="!
-)
-
-rem Remove all quotes from src.
-SET src=!src:"=!
-
-rem Get the length of the Project folder.
-CALL :strLen PJCT_FLDR len
-rem Subtract 2 for the quotes in PJCT_FLDR.
-rem SET /a len-=2
-rem The destination is the source after the Project folder.
-SET dst=!src:~%len%!
 
 :: Get the ASCII equivalent of the number.
 SET /a "cnt=%~1"
 call :ASCII %cnt% chr
 
+FOR /f "delims=" %%f IN (%3) DO (
+	rem Remember the Filename's name and extension...
+	SET fln=%%~nxf
+	rem ...and escape end parentheses.
+	SET fln=!fln:^)=^^^)!
+	rem Remember the Filename's drive and path, surrounded by "...
+	SET src="%%~dpf"
+	rem ...so you can drop the trailing \...
+	SET src=!src:\"="!
+	rem ...and remove all quotes from src.
+	SET src=!src:"=!
+	rem The destination is the source after the Project folder.
+	SET dst=!src:%PJCT_FLDR%=!
+)
+
 (
 ECHO.
 ECHO :%chr%^) %2 %3
+SET /A cnt+=1
+call :ASCII !cnt! chr
 ECHO rem if _FilesToCommit_ is a thing and %3 is not in it, skip.
-rem Escape end parentheses from fln.
-ECHO IF DEFINED _FilesToCommit_ ECHO %%_FilesToCommit_%% ^| FIND """%src%\!fln:^)=^^^)!""" ^> nul ^|^| GOTO :After%chr%
+ECHO IF DEFINED _FilesToCommit_ ECHO %%_FilesToCommit_%% ^| FIND """%src%\!fln!""" ^> nul ^|^| GOTO :!chr!
 
 if "%2" == "Deleted" (
 	ECHO rem Remember !_FileName_! is deleted.
-	ECHO SET ?!fln:^)=^^^)!?=?%%%%_Target%%%%
+	ECHO SET ?!fln!?=?%%%%_Target%%%%
 ) ELSE (
 	ECHO rem Copy %3 to the archive, creating the archive if necessary.
-	ECHO robocopy "%src%" "%%_Archive_%%%dst%" "!fln:^)=^^^)!"^>Nul
+	ECHO robocopy "%src%" "%%_Archive_%%%dst%" "!fln!"^>Nul
 )
 ECHO ECHO %2 %3
-ECHO ECHO :: %2 "%dst%\%fln%"^>^>"%REPO_FLDR%\Restore.cmd"
-ECHO :After%chr%
+ECHO ECHO :: %2 "%dst%\!fln!"^>^>"%REPO_FLDR%\Restore.cmd"
 )>>"%REPO_FLDR%\Commit.cmd"
 
-SET /A cnt+=1
 
 ENDLOCAL & SET "%~1=%cnt%"
 
@@ -1222,10 +1230,13 @@ if "%~2" neq "" (
 
 )
 
-::Unset _Compare_
-SET _Compare_=&rem
+:: Set compare to the current version.
+SET _Compare_=%PJCT_FLDR%\!_FileName_!
 
-::Look for the newest archive before the _Control_.
+:: And if it's a thing, start comparing.
+if exist "%_Compare_%" GOTO :StartCompare
+
+::Otherwise, look for the newest archive before _Control_.
 FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
 	IF "%%g" EQU "%_Control_%" GOTO :FoundCompare
 	SET _Compare_=%%g
@@ -1233,8 +1244,9 @@ FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| find
 
 :FoundCompare
 
-if not defined _Compare_ (
-	::Look for the oldest archive after the _Control_.
+::If _Compare_ did not change...
+if "%_Compare_%" EQU "%PJCT_FLDR%\!_FileName_!" (
+	::...look for the oldest archive after _Control_.
 	FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
 		if "%%g" NEQ "%_Control_%" (
 			SET _Compare_=%%g
@@ -1245,7 +1257,7 @@ if not defined _Compare_ (
 
 :StartCompare
 
-if not defined _Compare_ set _Compare_=%PJCT_FLDR%\!_FileName_!
+echo off
 
 color 7
 
@@ -1623,30 +1635,32 @@ exit /b
 del "%temp%\x"
 exit /b
 
-:PopulateExclude
+:GetExcludePatterns str
+::						-- str [out] - variable capturing the exclude patterns pipe delimited.
+SETLOCAL ENABLEDELAYEDEXPANSION
 
-SET exclude=
+SET exc=
 SET Batch=%~nx0
 
 :: If the Project Folder is the current directory, look for the files in this folder and if any are the same as this batch file, add them and their repo folder to exclude.
-IF "%PJCT_FLDR%" EQU "%CD%" FOR /f %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc @path """%Batch:)=^^)%""">Nul && echo @file"') do if not defined exclude (SET "exclude=%%~dpxna|%%~dpa+%%~na") else SET "exclude=!exclude!|%%~dpnxa|%%~dpa\+%%~na"
+IF "%PJCT_FLDR%" EQU "%CD%" FOR /f %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc @path """%Batch:)=^^)%""">Nul && echo @file"') do if not defined exc (SET "exc=%%~dpxna|%%~dpa+%%~na") else SET "exc=!exc!|%%~dpnxa|%%~dpa\+%%~na"
 
-:: Escape the Regex Metacharacters that are legal in a windows filename.
-SET "exclude=!exclude:\=\\!"
-SET "exclude=!exclude:+=\+!"
-SET "exclude=!exclude:-=\-!"
-SET "exclude=!exclude:.=\.!"
-SET "exclude=!exclude:$=\$!"
-SET "exclude=!exclude:^=\^!"
-SET "exclude=!exclude:]=\]!"
-SET "exclude=!exclude:[=\[!"
-SET "exclude=!exclude:^)=^\^)!"
+:: Escape the Regex Metacharacters that are legal in a windows path.
+SET "exc=!exc:\=\\!"
+SET "exc=!exc:+=\+!"
+SET "exc=!exc:-=\-!"
+SET "exc=!exc:.=\.!"
+SET "exc=!exc:$=\$!"
+SET "exc=!exc:^=\^!"
+SET "exc=!exc:]=\]!"
+SET "exc=!exc:[=\[!"
+SET "exc=!exc:^)=^\^)!"
 
 :: If Exclude.txt is a thing, add each line to exclude.
-if exist %REPO_FLDR%\Exclude.txt for /F "tokens=*" %%A in (%REPO_FLDR%\Exclude.txt) do SET "exclude=!exclude!^|%%A"
+if exist "%REPO_FLDR%\Exclude.txt" for /F "usebackq tokens=*" %%A in ("%REPO_FLDR%\Exclude.txt") do if not defined exc (SET "exc=%%A") else SET "exc=!exc!^|%%A"
 
-:: Unless the result is blank, wrap it in a where clause.
-if defined exclude set "exclude=| where fullname -notmatch '!exclude!' "
+:: Set the output to the result.
+ENDLOCAL & SET "%~1=%exc%"
 
 Exit /b
 
@@ -1655,19 +1669,21 @@ cls
 COLOR 4f
 CALL :EchoCenterPad " Patterns to exclude " "-"
 echo.
-if exist %REPO_FLDR%\Exclude.txt type %REPO_FLDR%\Exclude.txt
+if exist "%REPO_FLDR%\Exclude.txt" type "%REPO_FLDR%\Exclude.txt"
 echo.
 SET Msg=&SET /P Msg=Enter pattern to toggle or nothing to quit:
 ::If the user entered nothing, quit.
 if not defined Msg exit /b 0
 ::In case the user entered ! only, quit.
 if "!Msg!" EQU "^!" exit /b 0
+rem echo on
 :: If Exclude.txt is a thing and Msg is in it...
-if exist %REPO_FLDR%\Exclude.txt for /f "tokens=*" %%a in (%REPO_FLDR%\Exclude.txt) do if "%%a" EQU "%Msg%" (
+if exist "%REPO_FLDR%\Exclude.txt" for /f "usebackq tokens=*" %%a in ("%REPO_FLDR%\Exclude.txt") do if "%%a" EQU "%Msg%" (
 	CALL :CutExcludePattern "%Msg%"
 	GOTO :ExcludePatterns
 )
 
+rem echo off
 :: Otherwise, add exclude patterns.
 CALL :AddExcludePattern "%Msg%"
 GOTO :ExcludePatterns
@@ -1677,9 +1693,9 @@ echo %~1>>"%REPO_FLDR%\Exclude.txt"
 GOTO :EOF
 
 :CutExcludePattern
-if exist %REPO_FLDR%\Exclude.tmp del %REPO_FLDR%\Exclude.tmp
-ren %REPO_FLDR%\Exclude.txt Exclude.tmp
-for /F "tokens=*" %%A in (%REPO_FLDR%\Exclude.tmp) do if "%%A" NEQ "%~1" echo %%A>>%REPO_FLDR%\Exclude.txt
+if exist "%REPO_FLDR%\Exclude.tmp" del "%REPO_FLDR%\Exclude.tmp"
+ren "%REPO_FLDR%\Exclude.txt" Exclude.tmp
+for /F "usebackq tokens=*" %%A in ("%REPO_FLDR%\Exclude.tmp") do if "%%A" NEQ "%~1" echo %%A>>"%REPO_FLDR%\Exclude.txt"
 GOTO :EOF
 
 :IsNumeric <num>
@@ -1878,11 +1894,13 @@ if defined msk set CmdLine= -Filter '%msk%' %CmdLine%
 
 SET CmdLine=gci -af -Path %pth% %CmdLine%
 
-CALL :PopulateExclude
+CALL :GetExcludePatterns exclude
+
+if defined exclude set "exclude=^| where fullname -notmatch '!exclude!' "
 
 rem Run the PowerShell command.
-REM echo powershell -command "& {$Count=( !CmdLine! !exclude!| Measure-Object).Count; $I=0; !CmdLine! !exclude!| foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
-REM pause
+rem echo powershell -command "& {$Count=( !CmdLine! !exclude!| Measure-Object).Count; $I=0; !CmdLine! !exclude!| foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
+rem pause
 powershell -command "& {$Count=( !CmdLine! !exclude!| Measure-Object).Count; $I=0; !CmdLine! !exclude!| foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
 
 endlocal
