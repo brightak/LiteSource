@@ -52,8 +52,8 @@ ECHO.
 rem ECHO /D date       Selects files used in dd days, or since YYYYMMDD if dd ^>= 1900.
 ECHO /F app        The app to use as a file differencer.
 ECHO.
-ECHO /S            Includes SubFolders.
-ECHO.
+rem ECHO /S            Includes SubFolders.
+rem ECHO.
 ECHO./?            Displays this help message.
 ECHO.
 ECHO Type %~n0 without parameters to examine subsequent changes to files that have
@@ -62,7 +62,7 @@ ECHO is empty except for %~0, %~n0 requests a folder to track recursively.
 ECHO.
 ECHO Examples:
 ECHO     %~n0 N:\MyFolderOnly
-ECHO     %~n0 N:\MyFolderAndSubfolders\ /S
+rem ECHO     %~n0 N:\MyFolderAndSubfolders\ /S
 ECHO     %~n0 /C "Committing all changes."
 ECHO     %~n0 N:\SomeProjectFolder\FileToCommit.txt /C "Committing one file."
 ECHO     %~n0 N:\SomeProjectFolder\File1.txt N:\SomeProjectFolder\File2.txt /C "Committing numerous files."
@@ -100,7 +100,7 @@ GOTO RinseAndRepeat
 :SeekDifferencer
 
 :: If this argument isn't /F, look for a date.
-IF '%1' NEQ '/F' IF '%1' NEQ '/f' GOTO SeekDate
+IF '%1' NEQ '/F' IF '%1' NEQ '/f' GOTO SeekFile
 
 :: Otherwise, get the next arg and set it as the file differencer.
 SHIFT /1
@@ -113,88 +113,88 @@ SET _Diff_App_=!_Diff_App_:""="!
 
 GOTO RinseAndRepeat
 
-:SeekDate
-:: If this argument isn't /D, look for a file.
-IF '%1' NEQ '/D' IF '%1' NEQ '/d' GOTO SeekFile
+rem :SeekDate
+rem :: If this argument isn't /D, look for a file.
+rem IF '%1' NEQ '/D' IF '%1' NEQ '/d' GOTO SeekFile
 
-:: If the arg is /D, ensure that %2 is a thing.
-IF [%2] EQU [] ECHO Please specify a date when using /D. & pause & GOTO :EOF
+rem :: If the arg is /D, ensure that %2 is a thing.
+rem IF [%2] EQU [] ECHO Please specify a date when using /D. & pause & GOTO :EOF
 
-:: If Date is already a thing, goto help.
-IF DEFINED _Date_ GOTO HELP
+rem :: If Date is already a thing, goto help.
+rem IF DEFINED _Date_ GOTO HELP
 
-:: Otherwise, get the next arg and set it as the date.
-SHIFT /1
-SET _date_=%1
+rem :: Otherwise, get the next arg and set it as the date.
+rem SHIFT /1
+rem SET _date_=%1
 
-:: If it's numeric...
-call :IsNumeric _date_ && (
-	rem ...if the date is less than 1900...
-	if !_date_! LSS 1900 (
-		:: Otherwise, get today's date in julian format...
-		CALL :JDate d
-		:: ...subtract the input...
-		set /a d-=%_date_%
-		:: ...and save the result as a date.
-		call :JulianToDate d _date_
-		:: Then rinse and repeat.
-		GOTO RinseAndRepeat.
-	)
-	rem Otherwise, assume it was in YYYYMMDD format.
-	set _date_=%_date_:~5,2%/%_date_:~7,2%/%_date_:~1,4%
-)
+rem :: If it's numeric...
+rem call :IsNumeric _date_ && (
+rem 	rem ...if the date is less than 1900...
+rem 	if !_date_! LSS 1900 (
+rem 		:: Otherwise, get today's date in julian format...
+rem 		CALL :JDate d
+rem 		:: ...subtract the input...
+rem 		set /a d-=%_date_%
+rem 		:: ...and save the result as a date.
+rem 		call :JulianToDate d _date_
+rem 		:: Then rinse and repeat.
+rem 		GOTO RinseAndRepeat.
+rem 	)
+rem 	rem Otherwise, assume it was in YYYYMMDD format.
+rem 	set _date_=%_date_:~5,2%/%_date_:~7,2%/%_date_:~1,4%
+rem )
 
-set "MM=%_date_:~4,2%"
-set "DD=%_date_:~6,2%"
-set "YYYY=%_date_:~0,4%"
-set /A month=1%MM%-100, day=1%DD%-100, year=1%YYYY%-10000 2>NUL
-if errorlevel 1 GOTO Help
+rem set "MM=%_date_:~4,2%"
+rem set "DD=%_date_:~6,2%"
+rem set "YYYY=%_date_:~0,4%"
+rem set /A month=1%MM%-100, day=1%DD%-100, year=1%YYYY%-10000 2>NUL
+rem if errorlevel 1 GOTO Help
 
-:: If the day is less than the first, quit gracefully.
-if '%DD%' LSS '01' ECHO Please specify a valid date. & pause & GOTO :EOF
+rem :: If the day is less than the first, quit gracefully.
+rem if '%DD%' LSS '01' ECHO Please specify a valid date. & pause & GOTO :EOF
 
-:: If the month is less than the first, quit gracefully.
-if '%MM%' LSS '01' ECHO Please specify a valid date. & pause & GOTO :EOF
+rem :: If the month is less than the first, quit gracefully.
+rem if '%MM%' LSS '01' ECHO Please specify a valid date. & pause & GOTO :EOF
 
-:: If the month is more than the twelfth, quit gracefully.
-if '%MM%' GTR '12' ECHO Please specify a valid date. & pause & GOTO :EOF
+rem :: If the month is more than the twelfth, quit gracefully.
+rem if '%MM%' GTR '12' ECHO Please specify a valid date. & pause & GOTO :EOF
 
-:: If the century wasn't specified, assume the 21st.
-if '%YYYY%' LSS '0100' SET YYYY=20%YYYY:~-2%
+rem :: If the century wasn't specified, assume the 21st.
+rem if '%YYYY%' LSS '0100' SET YYYY=20%YYYY:~-2%
 
-:: Assume the maximum number of days is 30.
-SET MaxDays=30
+rem :: Assume the maximum number of days is 30.
+rem SET MaxDays=30
 
-:: If the month is February...
-IF '%MM%' EQU '02' (
+rem :: If the month is February...
+rem IF '%MM%' EQU '02' (
 
-	:: ...set the maximum days to 28...
-	SET MaxDays=28
+rem 	:: ...set the maximum days to 28...
+rem 	SET MaxDays=28
 
-	:: ...and find out if the year is a leap year...
-	IF '%YYYY:~-2%' NEQ '00' (
-		:: ...and if it is...
-		SET /A Y=%YYYY%%%4
-		:: ...set the maximum days to 29.
-		IF !Y! EQU 0 SET MaxDays=29
-	)
+rem 	:: ...and find out if the year is a leap year...
+rem 	IF '%YYYY:~-2%' NEQ '00' (
+rem 		:: ...and if it is...
+rem 		SET /A Y=%YYYY%%%4
+rem 		:: ...set the maximum days to 29.
+rem 		IF !Y! EQU 0 SET MaxDays=29
+rem 	)
 
-) ELSE (
+rem ) ELSE (
 
-	:: Otherwise, unless the month is April, June, September or November, set the maximum days to 31.
-	if '%MM%' NEQ '04' if '%MM%' NEQ '06' if '%MM%' NEQ '09' if '%MM%' NEQ '11' SET MaxDays=31
+rem 	:: Otherwise, unless the month is April, June, September or November, set the maximum days to 31.
+rem 	if '%MM%' NEQ '04' if '%MM%' NEQ '06' if '%MM%' NEQ '09' if '%MM%' NEQ '11' SET MaxDays=31
 
-)
+rem )
 
-:: If the day is more than the last for this month, quit gracefully.
-IF '%DD%' gtr '%MaxDays%' ECHO Please specify a valid date. & pause & GOTO :EOF
+rem :: If the day is more than the last for this month, quit gracefully.
+rem IF '%DD%' gtr '%MaxDays%' ECHO Please specify a valid date. & pause & GOTO :EOF
 
-SET _date_=%MM%/%DD%/%YYYY%
+rem SET _date_=%MM%/%DD%/%YYYY%
 
-GOTO RinseAndRepeat
+rem GOTO RinseAndRepeat
 :SeekFile
-If '%1' EQU '/S' SET _SubFolderSwitch_= /S&GOTO RinseAndRepeat
-If '%1' EQU '/s' SET _SubFolderSwitch_= /S&GOTO RinseAndRepeat
+rem If '%1' EQU '/S' SET _SubFolderSwitch_= /S&GOTO RinseAndRepeat
+rem If '%1' EQU '/s' SET _SubFolderSwitch_= /S&GOTO RinseAndRepeat
 	
 :: If it's not one of the above, assume it's a file or folder.
 :: If it doesn't exist...
@@ -278,7 +278,7 @@ if defined _FilesSpecified_ (
 	SET _NothingIsDeleted_=Y
 	
 	::Ensure the files are set to /S if applicable.
-	for /f "delims=?" %%f in ('set ? 2^>Nul') do set ?%%f?=?!_SubFolderSwitch_!
+	for /f "delims=?" %%f in ('set ? 2^>Nul') do set ?%%f?=? /S
 	
 
 ) ELSE (
@@ -452,7 +452,7 @@ ECHO SET _verb_=restore
 ECHO SET _Target_=
 ECHO SET _Archive_=
 SET /P "=SET PJCT_FLDR=" < Nul
-IF "%PJCT_FLDR%" NEQ "%CD%" ECHO %PJCT_FLDR%
+IF "%PJCT_FLDR%" NEQ "%CD%" ECHO %PJCT_FLDR:)=^)%
 ECHO.
 ECHO :Top
 ECHO rem If no more arguments, start.
@@ -513,12 +513,7 @@ ECHO rem If the target is not defined, set it to the PJCT_FLDR.
 ECHO IF NOT DEFINED _Target_ SET _Target_=%%PJCT_FLDR%%
 ECHO rem ASSUME if you can read this and PJCT_FLDR is not a thing, it's the parent directory.
 ECHO IF NOT DEFINED _Target_ FOR %%%%a IN ("%%REPO_FLDR:~0,-1%%"^) DO SET _Target_=%%%%~dpa
-ECHO rem Escape the Regex Metacharacters that are legal in a windows file path.
-ECHO SET _Target_=%%_Target_:\=\\%%
-ECHO SET _Target_=%%_Target_:+=\+%%
-ECHO SET _Target_=%%_Target_:^^=^^^^%%
-ECHO SET _Target_=%%_Target_:$=\$%%
-ECHO SET _Target_=%%_Target_:.=\.%%
+ECHO rem Ensure no quotes in the path.
 ECHO SET _Target_=%%_Target_:"=%%
 ECHO.
 ECHO SET _Confirm_=
@@ -675,7 +670,7 @@ If NOT EXIST "%REPO_FLDR%\New.txt" (
 	rem echo powershell -Command "& {Compare-Object (Get-Content '%REPO_FLDR%\Old.txt') (Get-Content '%REPO_FLDR%\New.txt') !exclude!| ft inputobject, @{n='file';e={ if ($_.SideIndicator -eq '=>') { '>' }  else { '<' } }} | out-file -width 1000 '%REPO_FLDR%\Diff.tmp'}" 
 	rem pause
 	powershell -Command "& {Compare-Object (Get-Content '%REPO_FLDR%\Old.txt') (Get-Content '%REPO_FLDR%\New.txt') !exclude!| ft inputobject, @{n='file';e={ if ($_.SideIndicator -eq '=>') { '>' }  else { '<' } }} | out-file -width 1000 '%REPO_FLDR%\Diff.tmp'}" 
-
+	
 	:: ...and if any are found...
 	FOR %%A IN ("%REPO_FLDR%\Diff.tmp") DO IF %%~zA EQU 0 GOTO CloseCommit
 
@@ -690,7 +685,7 @@ If NOT EXIST "%REPO_FLDR%\New.txt" (
 
 	:: Now, for each variable that starts with ?, use the var (filename) and value (Created/Updated/Deleted) to append Commit.cmd.
 	FOR  /F "tokens=1-3 delims=?" %%f In ('set ? 2^>Nul') DO CALL :AppendCommit ChangeCount %%h "%%f"
-	
+
 )
 
 :CloseCommit
@@ -1037,7 +1032,7 @@ FOR /f "delims=" %%f IN (%3) DO (
 	rem ...and remove all quotes from src.
 	SET src=!src:"=!
 	rem The destination is the source after the Project folder.
-	SET dst=!src:%PJCT_FLDR%=!
+	SET dst=!src:%PJCT_FLDR:)=^)%=!
 )
 
 (
