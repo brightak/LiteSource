@@ -2,8 +2,20 @@
 
 SETLOCAL ENABLEDELAYEDEXPANSION
 
+:::::::::::::::::::::::::::::::::::::: Settings Start ::::::::::::::::::::::::::::::::::::::
+
 rem SET File Differencer here (e.g. "C:\Program Files (x86)\Folder\Application.exe" "%%1" "%%2").
 SET _Diff_App_=
+
+rem Set the system's temporary folder.
+SET _Temp_Fldr_=C:\Temp
+
+::::::::::::::::::::::::::::::::::::::: Settings End :::::::::::::::::::::::::::::::::::::::
+
+rem Set ExcludeFile to a unique name...
+SET ExcludeFile=&CALL :TimeStamp ExcludeFile
+rem ...in the temp folder.
+SET ExcludeFile=%_Temp_Fldr_%\%ExcludeFile%
 
 SET _ForceCommit_=Y
 SET _Folder_=
@@ -112,6 +124,8 @@ IF "!_Diff_App_!" EQU "!_Diff_App_:%%1=!" SET _Diff_App_="!_Diff_App_!" "%%1" "%
 SET _Diff_App_=!_Diff_App_:""="!
 
 GOTO RinseAndRepeat
+
+rem TODO Add Excludes?
 
 rem :SeekDate
 rem :: If this argument isn't /D, look for a file.
@@ -353,7 +367,7 @@ for /f %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%Batch:)=^^)%
 set /p PJCT_FLDR=Please specify a folder to track (or enter nothing to quit): 
 
 :: If the user enters nothing, quit.
-if not defined PJCT_FLDR COLOR&GOTO :EOF
+if not defined PJCT_FLDR CALL :Adios
 
 :: Ensure backslashes after colons.
 SET PJCT_FLDR=!PJCT_FLDR:^:=^:\!
@@ -403,16 +417,27 @@ SET /P Msg=or nothing to quit:
 
 rem echo Msg=!Msg!
 
-if not defined Msg COLOR & GOTO :EOF
-
-:: Create the Repo folder if necessary.
-if not exist "%REPO_FLDR%" MD "%REPO_FLDR%\"
+if not defined Msg CALL :Adios
 
 rem If the user typed !, Exclude Patterns, then return to NoArchives.
 if "!Msg!" EQU "^!" CALL :ExcludePatterns & cls & color 1f & GOTO NoArchives
 
 rem If the user typed something 5 chars or shorter, return to NoArchives.
 IF "%Msg%" EQU "%Msg:~0,6%" cls & GOTO NoArchives
+
+:: If the Repo folder does not exist...
+if not exist "%REPO_FLDR%" (
+
+	::...create it.
+	MD "%REPO_FLDR%\"
+
+	:: If the ExcludeFile exists (in the temp folder), move it to the repo folder.
+	if exist "%ExcludeFile%" move "%ExcludeFile%" "%REPO_FLDR%\Exclude.txt" > nul
+
+)
+
+:: (Re)set the Exclude File name.
+set ExcludeFile=%REPO_FLDR%\Exclude.txt
 
 rem Unless Restore.cmd is a thing...
 if not exist "%REPO_FLDR%\Restore.cmd" (
@@ -589,6 +614,9 @@ CALL :IsFolder "!PJCT_FLDR!" || for /f "delims=" %%f in ("!PJCT_FLDR!") do SET P
 
 :: EXPECTS NO QUOTES!!!
 set PJCT_FLDR=%PJCT_FLDR:"=%
+
+rem (Re)set ExcludeFile
+Set ExcludeFile=%REPO_FLDR%\Exclude.txt
 
 :GetNewText
 SET Msg=
@@ -804,7 +832,7 @@ echo !\n!       ^^!     to toggle exclude patterns!\n!
 SET /P Msg=or nothing to quit: 
 
 rem If input is nothing, quit.
-IF not defined Msg (color & cls & GOTO :EOF)
+IF not defined Msg cls & CALL :Adios
 
 if "!Msg!" EQU "^!" CALL :ExcludePatterns&GOTO GetNewText
 
@@ -1634,8 +1662,8 @@ exit /b
 del "%temp%\x"
 exit /b
 
-:GetExcludePatterns str
-::						-- str [out] - variable capturing the exclude patterns pipe delimited.
+:GetExcludePatterns <String>
+::					-- String [out] - variable capturing the exclude patterns pipe delimited.
 SETLOCAL ENABLEDELAYEDEXPANSION
 
 SET exc=
@@ -1655,8 +1683,8 @@ SET "exc=!exc:]=\]!"
 SET "exc=!exc:[=\[!"
 SET "exc=!exc:^)=^\^)!"
 
-:: If Exclude.txt is a thing, add each line to exclude.
-if exist "%REPO_FLDR%\Exclude.txt" for /F "usebackq tokens=*" %%A in ("%REPO_FLDR%\Exclude.txt") do if not defined exc (SET "exc=%%A") else SET "exc=!exc!^|%%A"
+:: If ExcludeFile is a thing, add each line to exclude.
+if exist "%ExcludeFile%" for /F "usebackq tokens=*" %%A in ("%ExcludeFile%") do if not defined exc (SET "exc=%%A") else SET "exc=!exc!^|%%A"
 
 :: Set the output to the result.
 ENDLOCAL & SET "%~1=%exc%"
@@ -1668,16 +1696,16 @@ cls
 COLOR 4f
 CALL :EchoCenterPad " Patterns to exclude " "-"
 echo.
-if exist "%REPO_FLDR%\Exclude.txt" type "%REPO_FLDR%\Exclude.txt"
+if exist "%ExcludeFile%" type "%ExcludeFile%"
 echo.
-SET Msg=&SET /P Msg=Enter pattern to toggle or nothing to quit:
+SET Msg=&SET /P Msg=Enter pattern to toggle or nothing to return:
 ::If the user entered nothing, quit.
 if not defined Msg exit /b 0
 ::In case the user entered ! only, quit.
 if "!Msg!" EQU "^!" exit /b 0
 rem echo on
 :: If Exclude.txt is a thing and Msg is in it...
-if exist "%REPO_FLDR%\Exclude.txt" for /f "usebackq tokens=*" %%a in ("%REPO_FLDR%\Exclude.txt") do if "%%a" EQU "%Msg%" (
+if exist "%ExcludeFile%" for /f "usebackq tokens=*" %%a in ("%ExcludeFile%") do if "%%a" EQU "%Msg%" (
 	CALL :CutExcludePattern "%Msg%"
 	GOTO ExcludePatterns
 )
@@ -1688,13 +1716,16 @@ CALL :AddExcludePattern "%Msg%"
 GOTO ExcludePatterns
 
 :AddExcludePattern
-echo %~1>>"%REPO_FLDR%\Exclude.txt"
+echo %~1>>"%ExcludeFile%"
 GOTO :EOF
 
 :CutExcludePattern
-if exist "%REPO_FLDR%\Exclude.tmp" del "%REPO_FLDR%\Exclude.tmp"
-ren "%REPO_FLDR%\Exclude.txt" Exclude.tmp
-for /F "usebackq tokens=*" %%A in ("%REPO_FLDR%\Exclude.tmp") do if "%%A" NEQ "%~1" echo %%A>>"%REPO_FLDR%\Exclude.txt"
+:: Get a unique name for the temp file.
+SET TempFile=&CALL :TimeStamp TempFile
+:: Put each line from ExcludeFile except Msg to temp file.
+for /F "usebackq tokens=*" %%A in ("%ExcludeFile%") do if "%%A" NEQ "%~1" echo %%A>>"%_Temp_Fldr_%\%TempFile%"
+:: Overwrite the ExcludeFile with the TempFile.
+move /Y "%_Temp_Fldr_%\%TempFile%" "%ExcludeFile%" >nul
 GOTO :EOF
 
 :IsNumeric <num>
@@ -1910,15 +1941,15 @@ rem echo Is %~1 a folder?
 PUSHD "%~1" 2> Nul && POPD || EXIT /b 1
 EXIT /b 0
 
-:CleanFile string -- alphabetizes lines in a file and omits duplicates.
+:CleanFile <String> -- alphabetizes lines in a file and omits duplicates.
 powershell -command "& {gc '%~1' | sort -u | ? {$_ -ne ''} | Out-file '%REPO_FLDR%\Temp.del'}"
 Type "%REPO_FLDR%\Temp.del" > "%~1"
 del "%REPO_FLDR%\Temp.del"
 exit /b
 
-:strLen string len -- returns the length of a string
+:strLen <String> <int> -- returns the length of a string
 ::                 -- string [in]  - variable name containing the string being measured for length
-::                 -- len    [out] - variable to be used to return the string length
+::                 -- int    [out] - variable to be used to return the string length
 :: Many thanks to 'sowgtsoi', but also 'jeb' and 'amel27' dostips forum users helped making this short and efficient
 :$created 20081122 :$changed 20101116 :$categories StringOperation
 :$source http://www.dostips.com
@@ -1935,3 +1966,8 @@ exit /b
     IF "%~2" NEQ "" SET /a %~2=%len%
 )
 EXIT /b
+:Adios
+Color
+:: If the ExcludeFile exists and it's not in the repo folder, delete it from the temp folder.
+If exist %ExcludeFile% if not exist %REPO_FLDR% del %ExcludeFile%
+exit
