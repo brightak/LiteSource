@@ -5,4 +5,6 @@ Say you have a pet project or maybe a class assignment.  You'd like to have vers
 
 Run it from your source folder to back everything up.
 
-Or run it from an empty folder and it will ask what folder to track.
+Or run it from an empty folder and tell it what folder to track.
+
+Rename it first and the repo folder will be renamed accordingly. It will ignore files that are identical to it.
