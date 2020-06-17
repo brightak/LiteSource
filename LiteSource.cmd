@@ -407,7 +407,7 @@ if defined exclude set "exclude=^| where fullname -notmatch '!exclude!' "
 
 rem echo powershell -command "& gci '%PJCT_FLDR%' -Recurse !exclude!| ForEach-Object {$cnt+=1; $sum+=$_.Length;}; Write-Host ('Found {0} MB in {1} files in %PJCT_FLDR%' -f ($sum / 1MB), $cnt)"
 rem pause
-powershell -command "& gci '%PJCT_FLDR%' -Recurse !exclude!| ForEach-Object {$cnt+=1; $sum+=$_.Length;}; Write-Host ('Found {0} MB in {1} files in %PJCT_FLDR%' -f ($sum / 1MB), $cnt)"
+powershell -command "& gci -af '%PJCT_FLDR%' -Recurse !exclude!| ForEach-Object {$cnt+=1; $sum+=$_.Length;}; Write-Host ('Found {0} MB in {1} files in %PJCT_FLDR%' -f ($sum / 1MB), $cnt)"
 
 Set Msg=
 echo.
@@ -672,8 +672,12 @@ ECHO.
 ECHO rem Unset all vars beginning with ?.
 ECHO FOR /F "delims==" %%%%a In ('set ? 2^^^>Nul'^) DO SET "%%%%a="
 ECHO.
+ECHO SET i=0, n=0
+ECHO IF [%%3] EQU [] for /f %%%%f in ('findstr /r "^:[A-Z][A-Z]*)" "%%~f0"'^) do set /a n=n+1
+ECHO.
 ECHO :LoopArgs
 ECHO IF [%%3] EQU [] GOTO A^)
+ECHO SET /A n=n+1
 ECHO SET _FilesToCommit_=%%_FilesToCommit_%% %%2
 ECHO SHIFT
 ECHO GOTO LoopArgs
@@ -681,12 +685,17 @@ ECHO GOTO LoopArgs
 
 SET "ChangeCount=0"
 
+set i=0, n=0
 :: If New.txt is not a thing...
 If NOT EXIST "%REPO_FLDR%\New.txt" (
 	rem echo on
+	for /f %%f in ('type "%REPO_FLDR%\Old.txt" ^| FIND /C /V ""') do set n=%%f
 	:: ...every file in Old.txt (ASSUMES filenames in Old.txt are delimited by ") is a creation.
-	for /f delims^=^" %%f IN ('type "%REPO_FLDR%\Old.txt"') do CALL :AppendCommit ChangeCount Created "%%f"
-	rem pause
+	for /f delims^=^" %%f IN ('type "%REPO_FLDR%\Old.txt"') do (
+		CALL :AppendCommit ChangeCount Created "%%f"
+		set /A i+=1, percent=i*100/n
+		title Preparing archive !percent!%% complete.
+	)
 ) ELSE (
 
 	CALL :GetExcludePatterns exclude
@@ -701,8 +710,8 @@ If NOT EXIST "%REPO_FLDR%\New.txt" (
 	
 	:: ...and if any are found...
 	FOR %%A IN ("%REPO_FLDR%\Diff.tmp") DO IF %%~zA EQU 0 GOTO CloseCommit
-
-	:: Unset all variables starting with ?.  ASSUMES ? is an illegal char in a file name.
+	
+	:: ...unset all variables starting with ?.  ASSUMES ? is an illegal char in a file name.
 	FOR /F "delims==" %%a In ('set ? 2^>Nul') DO SET "%%a="
 
 	:: For each filename in Old.txt, if it's not in New.txt, flag it as deleted. ASSUMES filenames in Old.txt are delimited by "
@@ -711,8 +720,15 @@ If NOT EXIST "%REPO_FLDR%\New.txt" (
 	:: For each filename in New.txt, if it's in Old.txt, flag it as updated.  Otherwise, flag it as created.
 	for /f delims^=^" %%f IN ('type "%REPO_FLDR%\Diff.tmp" ^| findstr ^^^>') do type "!REPO_FLDR!\Diff.tmp" | findstr ^< | findstr /C:"%%f" > Nul && SET ?%%f?=?Updated || SET ?%%f?=?Created
 
+	:: Count the number of files found.
+	for /f %%f in ('set ? 2^>Nul') do set /a n=n+1
+
 	:: Now, for each variable that starts with ?, use the var (filename) and value (Created/Updated/Deleted) to append Commit.cmd.
-	FOR  /F "tokens=1-3 delims=?" %%f In ('set ? 2^>Nul') DO CALL :AppendCommit ChangeCount %%h "%%f"
+	FOR  /F "tokens=1-3 delims=?" %%f In ('set ? 2^>Nul') DO (
+		CALL :AppendCommit ChangeCount %%h "%%f"
+		set /A percent=ChangeCount*100/n
+		title Preparing archive !percent!%% complete.
+	)
 
 )
 
@@ -802,7 +818,8 @@ if !_LastChange! NEQ A (
 
 :NoChanges
 
-IF !ChangeCount! EQU 0 echo No changes to commit and no commits to restore. & pause & color & cls & GOTO :EOF
+rem If the commits number 0, pause and quit.
+IF %i% EQU 0 echo No changes to commit and no commits to restore. & pause & color & cls & GOTO :EOF
 
 for /f "tokens=1* delims= " %%f in ('mode con ^| find /i "columns"') do set /a cols=%%g - 2
 
@@ -822,8 +839,8 @@ IF %i% EQU 1 (
 	IF EXIST "%PJCT_FLDR%" echo        1     to restore the archive
 	ECHO       @1     to explore the archive!\n!
 ) ELSE IF %i% GTR 1 (
-	IF EXIST "%PJCT_FLDR%" echo     (1-%i%^)    to restore a archive
-	ECHO    @(1-%i%^)    to explore a archive!\n!
+	IF EXIST "%PJCT_FLDR%" echo     (1-%i%^)    to restore an archive
+	ECHO    @(1-%i%^)    to explore an archive!\n!
 )
 
 if not exist "!PJCT_FLDR!" SET i=0
@@ -1080,8 +1097,8 @@ if "%2" == "Deleted" (
 )
 ECHO ECHO %2 %3
 ECHO ECHO :: %2 "%dst%\!fln!"^>^>"%REPO_FLDR%\Restore.cmd"
-)>>"%REPO_FLDR%\Commit.cmd"
-
+ECHO set /A i+=1, percent=i*100/n
+ECHO title Archive ^^!percent^^!%%%% complete.)>>"%REPO_FLDR%\Commit.cmd"
 
 ENDLOCAL & SET "%~1=%cnt%"
 
@@ -1092,7 +1109,7 @@ SETLOCAL EnableDelayedExpansion
 SET _ArchiveChanged_=
 :StartExploreArchive
 cls
-color 2E
+color 2f
 :: Get the %1th archive from Restore.cmd.  WARNING: If %1th archive is not a thing, _Archive_ is not set.
 for /f "tokens=1* delims=:" %%f in ('findstr /r ":[0-9][0-9]*" "%REPO_FLDR%\Restore.cmd" ^| find ":" /n ^| findstr /b "[%1\]:"') do SET _Archive_=%%g
 
@@ -1698,7 +1715,7 @@ CALL :EchoCenterPad " Patterns to exclude " "-"
 echo.
 if exist "%ExcludeFile%" type "%ExcludeFile%"
 echo.
-SET Msg=&SET /P Msg=Enter pattern to toggle or nothing to return:
+SET Msg=&SET /P Msg=Enter regex pattern to toggle or nothing to return:
 ::If the user entered nothing, quit.
 if not defined Msg exit /b 0
 ::In case the user entered ! only, quit.
