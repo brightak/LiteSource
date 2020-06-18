@@ -672,7 +672,7 @@ ECHO.
 ECHO rem Unset all vars beginning with ?.
 ECHO FOR /F "delims==" %%%%a In ('set ? 2^^^>Nul'^) DO SET "%%%%a="
 ECHO.
-ECHO SET i=0, n=0
+ECHO SET /a i=0, n=0
 ECHO IF [%%3] EQU [] for /f %%%%f in ('findstr /r "^:[A-Z][A-Z]*)" "%%~f0"'^) do set /a n=n+1
 ECHO.
 ECHO :LoopArgs
@@ -685,7 +685,7 @@ ECHO GOTO LoopArgs
 
 SET "ChangeCount=0"
 
-set i=0, n=0
+set /a i=0, n=0
 :: If New.txt is not a thing...
 If NOT EXIST "%REPO_FLDR%\New.txt" (
 	rem echo on
@@ -1245,7 +1245,7 @@ rem SET _FileName_=!_FileName_:\=\\!
 rem echo _FileName_=%_FileName_%
 
 :: Look for archived versions of _FileName_, and if not found, complain and quit.
-dir "%REPO_FLDR%" /b /s | findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%" > Nul || (
+dir "%REPO_FLDR%" /b /s | findstr /RBEC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%" > Nul || (
 	ECHO %_FileName_% not archived.
 	PAUSE
 	ENDLOCAL
@@ -1270,7 +1270,7 @@ if "%~2" neq "" (
 ) else (
 
 	:: Otherwise, set _Control_ to the newest archive of this file, minus the CD.
-	for /f "tokens=%backslashes%* delims=\" %%f in ('dir "%REPO_FLDR%" /b /s /n ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') do set _Control_=%%g
+	for /f "tokens=%backslashes%* delims=\" %%f in ('dir "%REPO_FLDR%" /b /s /n ^| findstr /RBEC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') do set _Control_=%%g
 
 )
 
@@ -1281,7 +1281,7 @@ SET _Compare_=%PJCT_FLDR%\!_FileName_!
 if exist "%_Compare_%" GOTO StartCompare
 
 ::Otherwise, look for the newest archive before _Control_.
-FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
+FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RBEC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
 	IF "%%g" EQU "%_Control_%" GOTO FoundCompare
 	SET _Compare_=%%g
 )
@@ -1291,7 +1291,7 @@ FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| find
 ::If _Compare_ did not change...
 if "%_Compare_%" EQU "%PJCT_FLDR%\!_FileName_!" (
 	::...look for the oldest archive after _Control_.
-	FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
+	FOR /F "tokens=%backslashes%* delims=\" %%f IN ('dir "%REPO_FLDR%" /b /s ^| findstr /RBEC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') DO (
 		if "%%g" NEQ "%_Control_%" (
 			SET _Compare_=%%g
 			GOTO StartCompare
@@ -1514,7 +1514,7 @@ set chr=
 echo.
 
 rem Look through the archives for (relative) _FileName_
-for /f "tokens=%backslashes%* delims=\" %%f in ('dir "%REPO_FLDR%" /b /s ^| findstr /RC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') do (
+for /f "tokens=%backslashes%* delims=\" %%f in ('dir "%REPO_FLDR%" /b /s ^| findstr /RBEC:"%CD:\=\\%\\%REPO_FLDR%\\[0-9][0-9]*\\%_FileName_:\=\\%"') do (
 
 	CALL :ASCII !cnt! chr
 
