@@ -356,15 +356,20 @@ If EXIST "%REPO_FLDR%\Old.txt" GOTO GotOldText
 
 CLS
 
-:: If this is your first rodeo, unset the PJCT_FLDR.
-SET PJCT_FLDR=
+SET PJCT_FLDR=!CD!
 
+:: If this is your first rodeo...
 SET Batch=%~nx0
-:: Look for the files in this folder and if any are different from this batch file, this is the path.
-for /f %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%Batch:)=^^)%""">Nul || echo @file"') do SET PJCT_FLDR=!CD!& GOTO NoArchives
 
+:: ...look for the files in this folder and if any are different from this batch file, this is the path.
+for /f %%a in ('forfiles /c "cmd /c if @isdir==FALSE fc "@path" """%Batch:)=^^)%""">Nul || echo @file"') do GOTO MakeRepo
+
+:: If anything else exists in this folder, besides this file, this is the path.
+dir /a /b | find /v "%~dpnx0" > Nul && GOTO MakeRepo
+
+:ChooseTarget
 :: Otherwise, ask for a folder to track.
-set /p PJCT_FLDR=Please specify a folder to track (or enter nothing to quit): 
+SET PJCT_FLDR=&set /p PJCT_FLDR=Please specify a folder to track (or enter nothing to quit): 
 
 :: If the user enters nothing, quit.
 if not defined PJCT_FLDR CALL :Adios
@@ -399,7 +404,7 @@ SET PJCT_FLDR=%PJCT_FLDR:"=%
 
 echo.
 
-:NoArchives
+:MakeRepo
 
 CALL :GetExcludePatterns exclude
 
@@ -413,17 +418,21 @@ Set Msg=
 echo.
 echo Enter a message (5+ chars) to commit,
 echo or ^^! to select files to exclude, 
+echo or ~ to change project folder,
 SET /P Msg=or nothing to quit: 
 
 rem echo Msg=!Msg!
 
 if not defined Msg CALL :Adios
 
-rem If the user typed !, Exclude Patterns, then return to NoArchives.
-if "!Msg!" EQU "^!" CALL :ExcludePatterns & cls & color 1f & GOTO NoArchives
+rem If the user typed !, exclude patterns, then return to MakeRepo.
+if "!Msg!" EQU "^!" CALL :ExcludePatterns & cls & color 1f & GOTO MakeRepo
 
-rem If the user typed something 5 chars or shorter, return to NoArchives.
-IF "%Msg%" EQU "%Msg:~0,6%" cls & GOTO NoArchives
+rem If the user typed ~, change project folder, then return to MakeRepo.
+if "!Msg!" EQU "~" PJCT_FLDR=&cls & GOTO ChooseTarget
+
+rem If the user typed something 5 chars or shorter, return to MakeRepo.
+IF "%Msg%" EQU "%Msg:~0,6%" cls & GOTO MakeRepo
 
 :: If the Repo folder does not exist...
 if not exist "%REPO_FLDR%" (
