@@ -682,7 +682,7 @@ ECHO rem Unset all vars beginning with ?.
 ECHO FOR /F "delims==" %%%%a In ('set ? 2^^^>Nul'^) DO SET "%%%%a="
 ECHO.
 ECHO SET /a i=0, n=0
-ECHO IF [%%3] EQU [] for /f %%%%f in ('findstr /r "^:[A-Z][A-Z]*)" "%%~f0"'^) do set /a n=n+1
+ECHO IF [%%3] EQU [] SET /a n=-1^&for /f %%%%f in ('findstr /r "^:[A-Z][A-Z]*)" "%%~f0"'^) do set /a n=n+1
 ECHO.
 ECHO :LoopArgs
 ECHO IF [%%3] EQU [] GOTO A^)
@@ -1957,7 +1957,7 @@ if defined exclude set "exclude=^| where fullname -notmatch '!exclude!' "
 rem Run the PowerShell command.
 rem echo powershell -command "& {$Count=( !CmdLine! !exclude!| Measure-Object).Count; $I=0; !CmdLine! !exclude!| foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
 rem pause
-powershell -command "& {$Count=( !CmdLine! !exclude!| Measure-Object).Count; $I=0; !CmdLine! !exclude!| foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
+powershell -command "& {$Count=( !CmdLine! !exclude!| Measure-Object).Count; $I=0; $L=('%PJCT_FLDR%').Length; !CmdLine! !exclude!| foreach {$I++; Write-Progress -Activity ('Scanning {0} files in %PJCT_FLDR%' -f $Count) -Status $_.FullName.Substring($L) -PercentComplete($I/$Count*100); """"""""""{0}""""""""|""""""""{1}"""""""""" -f $_.FullName, (Get-Filehash($_.FullName)).hash;} | out-file -append '%REPO_FLDR%\New.txt'}"
 
 endlocal
 EXIT /b
