@@ -1116,7 +1116,7 @@ exit /b 0
 :ExploreArchive <Archive>
 SETLOCAL EnableDelayedExpansion
 SET _ArchiveChanged_=
-:StartExploreArchive
+:FileMenu
 cls
 color 2f
 :: Get the %1th archive from Restore.cmd.  WARNING: If %1th archive is not a thing, _Archive_ is not set.
@@ -1158,43 +1158,29 @@ FOR /F "delims==" %%a In ('set ? 2^>Nul') DO SET "%%a="
 rem From Restore.cmd, get the line number of the specified archive.
 for /f "delims=:" %%f in ('findstr /N :!_Archive_! "!REPO_FLDR!\Restore.cmd"') do SET n=%%f
 
-:: Increment the line number by 2
-SET /a n+=2
-:: Determine if the 2nd line after the archive label describes a comment.
-findstr /nr "." "%REPO_FLDR%\Restore.cmd" | findstr /b "%n%:::" > Nul && SET _MultipleFilesFound_=Y || SET _MultipleFilesFound_=
-:: Decrement the line number by 2.
-SET /a n-=2
-
 set /a cnt=0
-:GetComment	
-:: Increment n...
-SET /a n+=1
 
-:: ...unset _Line_ and get the nth line in Restore.cmd and if it starts with ::, set _Line_ to it preempted by three spaces.
-SET _Line_=&for /f "tokens=1* delims=:" %%f in ('findstr /nr "." "%REPO_FLDR%\Restore.cmd" ^| findstr /b "%n%:::"') do SET _Line_=   %%g
-
-:: If _Line_ is a thing...
-if defined _Line_ (
+for /f "tokens=1-2* delims=: " %%f in ('findstr /nr "." "%REPO_FLDR%\Restore.cmd"') do if %%f gtr %n% (
+	if [%%g] equ [GOTO] goto :PickFile
 	:: ...get the count's corresponding ASCII character(s)...
 	call :ASCII !cnt! chr
 	:: ...increment cnt...
 	SET /a cnt+=1
-	:: ...save everything after the second word.
-	for /f "tokens=1* delims= " %%f in ("%_Line_%") do set ?!chr!?=%%g
-	if defined _MultipleFilesFound_ (
-		:: If the label is two letters, drop a space from _Line_
-		rem if !cnt! GTR 26 SET _Line_=!_Line_:~1!
-		:: If three, drop a second.
-		rem if !cnt! GTR 676 SET _Line_=!_Line_:~1!
-		:: If four, drop a third.
-		rem if !cnt! GTR 17576 SET _Line_=!_Line_:~1!
-		:: Echo the label and the line.
-		ECHO !chr!^) !_Line_!
-	)
-	:: Loop.
-	GOTO GetComment
+	:: ...save the file name.
+	set ?!chr!?=%%h
+	:: Set the spaces.
+	set _Spaces_=    &rem
+	:: If the label is two letters, drop a space from _Spaces_.
+	if !cnt! GTR 26 SET _Spaces_=!_Spaces_:~1!
+	:: If three, drop a second.
+	if !cnt! GTR 676 SET _Spaces_=!_Spaces_:~1!
+	:: If four, drop a third.
+	if !cnt! GTR 17576 SET _Spaces_=!_Spaces_:~1!
+	:: Echo the label, the spaces, the action and the filename.
+	ECHO !chr!^)!_Spaces_! %%g %%h
 )
 
+:PickFile
 if "%chr%" EQU "A" (
 	SET Msg=A
 ) ELSE (
@@ -1211,14 +1197,14 @@ if "!Selection:~0,1!" EQU "@" set Selection=!Msg:~1!
 rem Unless the user just clicked Enter...
 if defined Selection (
 	rem If the target is still not defined, complain and retry.
-	if not defined ?%Selection%? echo %Selection% not found.&pause&CLS&GOTO StartExploreArchive
+	if not defined ?%Selection%? echo %Selection% not found.&pause&CLS&GOTO FileMenu
 	rem Set the target.
 	set _Target_=!?%Selection%?!
 	rem Explore the file.
 	CALL :ExploreFile !_Target_! "%REPO_FLDR%\!_Archive_!!_Target_:"=!"
 	if !ERRORLEVEL! equ 1 SET _ArchiveChanged_=Y
 	rem Refresh the menu.
-	if "%chr%" NEQ "A" CLS&GOTO StartExploreArchive
+	if "%chr%" NEQ "A" CLS&GOTO FileMenu
 )
 
 if defined _ArchiveChanged_ (endlocal & exit /b 1)
@@ -1322,7 +1308,7 @@ call :EchoCenterPad " %~1 " "-"
 fc /n "%_Control_%" "%_Compare_%" > "%REPO_FLDR%\Comp.tmp"
 
 :: If there were no differences, exit 0.
-if !errorlevel! equ 0 echo No differences found.& pause & endlocal & exit /b 0
+rem if !errorlevel! equ 0 echo No differences found.& pause & endlocal & exit /b 0
 
 :: From the FC result, print the lines that begin with letters.
 for /f "delims=" %%f in ('type "%REPO_FLDR%\Comp.tmp" ^| FINDSTR /rc:"^[A-Z]"') do echo %%f
