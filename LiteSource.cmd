@@ -7,6 +7,9 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 rem SET File Differencer here (e.g. "C:\Program Files (x86)\Folder\Application.exe" "%%1" "%%2").
 SET _Diff_App_=
 
+rem Set the FC Commands settings (e.g. /W).
+SET _Diff_Settings_=
+
 rem Set the system's temporary folder.
 SET _Temp_Fldr_=C:\Temp
 
@@ -687,7 +690,8 @@ ECHO.
 ECHO :LoopArgs
 ECHO IF [%%3] EQU [] GOTO A^)
 ECHO SET /A n=n+1
-ECHO SET _FilesToCommit_=%%_FilesToCommit_%% %%2
+ECHO SET _FilesToCommit_=%%_FilesToCommit_%% "%%3" rem Ensure quotes around the filename...
+ECHO SET _FilesToCommit_=%%_FilesToCommit_:""="%%  rem ...but only one set.
 ECHO SHIFT
 ECHO GOTO LoopArgs
 )>"!REPO_FLDR!\Commit.cmd"
@@ -779,15 +783,15 @@ CALL :EchoCenterPad " %title% " "-"
 :: Count the number of archives listed in Restore.cmd.
 for /f %%a in ('findstr /r ":[0-9][0-9]*" "%REPO_FLDR%\Restore.cmd"^|find ":" /c') do set i=%%a
 
-if i NEQ 0 powershell -command "& {$ctr=0; Write-Host ''; (gc '.\%REPO_FLDR%\Restore.cmd') | ForEach-Object { if ($_ -match ':(\d+) (.+)') {$ts = NEW-TIMESPAN ([DateTime]::ParseExact($matches[1], 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture)) (GET-DATE); $ctr++; $line=([string]$ctr) + ')'; $line=$line.PadRight(5); $q=$ts.minutes; $i=' minute'; if ($ts.days -ne 0) { $q=$ts.days; $i=' day';} else {if ($ts.hours -ne 0) { $q=$ts.hours; $i=' hour';}} if ($q -ne 1) {$i+='s'} $line=$line + $q + $i + ' ago.'; Write-Host $line.PadRight(20) $matches[2];}}}"
+if %i% NEQ 0 powershell -command "& {$ctr=0; Write-Host ''; (gc '.\%REPO_FLDR%\Restore.cmd') | ForEach-Object { if ($_ -match ':(\d+) (.+)') {$ts = NEW-TIMESPAN ([DateTime]::ParseExact($matches[1], 'yyyyMMddHHmmssff',[System.Globalization.CultureInfo]::InvariantCulture)) (GET-DATE); $ctr++; $line=([string]$ctr) + ')'; $line=$line.PadRight(5); $q=$ts.minutes; $i=' minute'; if ($ts.days -ne 0) { $q=$ts.days; $i=' day';} else {if ($ts.hours -ne 0) { $q=$ts.hours; $i=' hour';}} if ($q -ne 1) {$i+='s'} $line=$line + $q + $i + ' ago.'; Write-Host $line.PadRight(20) $matches[2];}}}"
 
 ECHO.
 
 SET n=
 SET _FileDesc_=
-IF !ChangeCount! EQU 0 GOTO NoChanges 
+IF !ChangeCount! EQU 0 GOTO GetMessage 
 
-SET _LastChange=
+SET _LastChange=&rem
 
 SET title=!ChangeCount! Change
 
@@ -825,10 +829,10 @@ if !_LastChange! NEQ A (
 	SET _FileDesc_=      @A     to explore the file
 )
 
-:NoChanges
+:GetMessage
 
-rem If the commits number 0, pause and quit.
-IF %i% EQU 0 echo No changes to commit and no commits to restore. & pause & color & cls & GOTO :EOF
+rem If the commits number 0 and changes number 0, pause and quit.
+IF %i% EQU 0 if !ChangeCount! EQU 0 echo No changes to commit and no commits to restore. & pause & color & cls & GOTO :EOF
 
 for /f "tokens=1* delims= " %%f in ('mode con ^| find /i "columns"') do set /a cols=%%g - 2
 
@@ -1095,7 +1099,7 @@ ECHO :%chr%^) %2 %3
 SET /A cnt+=1
 call :ASCII !cnt! chr
 ECHO rem if _FilesToCommit_ is a thing and %3 is not in it, skip.
-ECHO IF DEFINED _FilesToCommit_ ECHO %%_FilesToCommit_%% ^| FIND """%src%\!fln!""" ^> nul ^|^| GOTO !chr!^)
+ECHO IF DEFINED _FilesToCommit_ ECHO %%_FilesToCommit_%% ^| FIND "%src%\!fln!" ^> nul ^|^| GOTO !chr!^)
 
 if "%2" == "Deleted" (
 	ECHO rem Remember !_FileName_! is deleted.
@@ -1305,7 +1309,7 @@ cls
 call :EchoCenterPad " %~1 " "-"
 
 :: Get the differences in the input.
-fc /n "%_Control_%" "%_Compare_%" > "%REPO_FLDR%\Comp.tmp"
+fc /n %_Diff_Settings_% "%_Control_%" "%_Compare_%" > "%REPO_FLDR%\Comp.tmp"
 
 :: If there were no differences, exit 0.
 rem if !errorlevel! equ 0 echo No differences found.& pause & endlocal & exit /b 0
