@@ -1467,7 +1467,7 @@ if defined oldChange (
 	)
 
 	:: If the two sets end the same way (except, maybe, for line numbers)...
-	if "!_OldStart_:~6!" EQU "!_NewStart_:~6!" (
+	if "!_OldEnding_:~6!" EQU "!_NewEnding_:~6!" (
 		:: Print all but the last line of the new set in green.
 		for /f "tokens=1* delims=[]" %%f in ('find /v "" /n "%REPO_FLDR%\Comp.tmp"') do if %%f geq !n1! if %%f lss !n2! (
 			set str=%%g
